@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brainstorming Canvas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Panel - Concepts & Ideas -->
+        <div class="left-panel" id="leftPanel">
+            <div class="panel-header">
+                <h3>Concepts & Ideas</h3>
+                <button class="toggle-btn" id="toggleLeft">−</button>
+            </div>
+            <div class="panel-content">
+                <div class="concept-list" id="conceptList">
+                    <!-- Concepts will be dynamically added here -->
+                </div>
+                <button class="add-concept-btn" id="addConceptBtn">+ Add New Concept</button>
+            </div>
+        </div>
+
+        <!-- Main Canvas -->
+        <div class="main-canvas">
+            <div class="canvas-header">
+                <h2 id="currentConceptTitle">Select a concept to start brainstorming</h2>
+                <div class="canvas-controls">
+                    <div class="session-selector" id="sessionSelector" style="display: none;">
+                        <select id="sessionSelect" onchange="app.switchSession(this.value)">
+                            <option value="">Select Session</option>
+                        </select>
+                        <button class="add-session-btn" onclick="app.addSession()">+ New Session</button>
+                    </div>
+                    <button class="ranked-btn" id="rankedBtn" onclick="app.showRankedIdeas()">🏆 Ranked Ideas</button>
+                </div>
+            </div>
+            
+            <div class="brainstorming-area" id="brainstormingArea">
+                <div class="welcome-message">
+                    <p>Welcome to your brainstorming canvas!</p>
+                    <p>• Press <kbd>Q</kbd> to add a new question</p>
+                    <p>• Press <kbd>A</kbd> to add an answer to the selected question</p>
+                    <p>• Use number keys <kbd>1-5</kbd> to color-rate answers</p>
+                    <p>• Press <kbd>Ctrl+L</kbd> to toggle left panel</p>
+                    <p>• Press <kbd>Ctrl+R</kbd> to toggle right panel</p>
+                </div>
+            </div>
+            
+            <div class="add-question-container">
+                <button class="add-question-btn" id="addQuestionBtn">+ Add New Question</button>
+            </div>
+        </div>
+
+        <!-- Right Panel - Inspiration -->
+        <div class="right-panel" id="rightPanel">
+            <div class="panel-header">
+                <h3>Inspiration</h3>
+                <button class="toggle-btn" id="toggleRight">−</button>
+            </div>
+            <div class="panel-content">
+                <div class="inspiration-tabs">
+                    <button class="tab-btn active" data-tab="questions">Questions</button>
+                    <button class="tab-btn" data-tab="prompts">Prompts</button>
+                    <button class="tab-btn" data-tab="words">Random Words</button>
+                    <button class="tab-btn" data-tab="types">Question Types</button>
+                </div>
+                
+                <div class="tab-content active" id="questionsTab">
+                    <h4>Question Types</h4>
+                    <div class="inspiration-list">
+                        <div class="inspiration-item" data-type="question">What if...?</div>
+                        <div class="inspiration-item" data-type="question">How might we...?</div>
+                        <div class="inspiration-item" data-type="question">Why does...?</div>
+                        <div class="inspiration-item" data-type="question">What's stopping us from...?</div>
+                        <div class="inspiration-item" data-type="question">How can we make... better?</div>
+                        <div class="inspiration-item" data-type="question">What would happen if we...?</div>
+                        <div class="inspiration-item" data-type="question">Who would benefit from...?</div>
+                        <div class="inspiration-item" data-type="question">When is the best time to...?</div>
+                        <div class="inspiration-item" data-type="question">Where could we...?</div>
+                        <div class="inspiration-item" data-type="question">What's the opposite of...?</div>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="promptsTab">
+                    <h4>Creative Prompts</h4>
+                    <div class="inspiration-list">
+                        <div class="inspiration-item" data-type="prompt">Think like a 5-year-old</div>
+                        <div class="inspiration-item" data-type="prompt">What would Steve Jobs do?</div>
+                        <div class="inspiration-item" data-type="prompt">Imagine unlimited budget</div>
+                        <div class="inspiration-item" data-type="prompt">What if it had to be done in 1 hour?</div>
+                        <div class="inspiration-item" data-type="prompt">Think from user's perspective</div>
+                        <div class="inspiration-item" data-type="prompt">What would make this viral?</div>
+                        <div class="inspiration-item" data-type="prompt">How would this work in 2050?</div>
+                        <div class="inspiration-item" data-type="prompt">What's the simplest solution?</div>
+                        <div class="inspiration-item" data-type="prompt">Think like your biggest competitor</div>
+                        <div class="inspiration-item" data-type="prompt">What if it had to be free?</div>
+                    </div>
+                </div>
+                
+                <div class="tab-content" id="wordsTab">
+                    <h4>Random Words & Props</h4>
+                    <div class="inspiration-list">
+                        <div class="inspiration-item" data-type="word">Elephant</div>
+                        <div class="inspiration-item" data-type="word">Cloud</div>
+                        <div class="inspiration-item" data-type="word">Mirror</div>
+                        <div class="inspiration-item" data-type="word">Clock</div>
+                        <div class="inspiration-item" data-type="word">Bridge</div>
+                        <div class="inspiration-item" data-type="word">Key</div>
+                        <div class="inspiration-item" data-type="word">Lightning</div>
+                        <div class="inspiration-item" data-type="word">Maze</div>
+                        <div class="inspiration-item" data-type="word">Rocket</div>
+                        <div class="inspiration-item" data-type="word">Puzzle</div>
+                    </div>
+                    <button class="randomize-btn" id="randomizeWords">🎲 Randomize</button>
+                </div>
+                
+                <div class="tab-content" id="typesTab">
+                    <h4>Custom Question Types</h4>
+                    <div class="inspiration-list">
+                        <div class="inspiration-item" data-type="question">Hypothetical Questions</div>
+                        <div class="inspiration-item" data-type="question">Alternate Possibilities</div>
+                        <div class="inspiration-item" data-type="question">Tweaking Small Details</div>
+                        <div class="inspiration-item" data-type="question">Consequence-Based</div>
+                        <div class="inspiration-item" data-type="question">Reversal Questions</div>
+                        <div class="inspiration-item" data-type="question">Perspective-Shifting</div>
+                        <div class="inspiration-item" data-type="question">Exaggeration & Absurdity</div>
+                        <div class="inspiration-item" data-type="question">Combination Questions</div>
+                        <div class="inspiration-item" data-type="question">Restriction Questions</div>
+                        <div class="inspiration-item" data-type="question">Removal Questions</div>
+                        <div class="inspiration-item" data-type="question">"But" Questions</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <div class="bottom-nav" id="bottomNav">
+        <div class="nav-item" data-tab="concepts">
+            <div class="nav-icon">📁</div>
+            <span class="nav-label">Concepts</span>
+        </div>
+        <div class="nav-item active" data-tab="canvas">
+            <div class="nav-icon">📋</div>
+            <span class="nav-label">Canvas</span>
+        </div>
+        <div class="nav-item" data-tab="ranked">
+            <div class="nav-icon">🏆</div>
+            <span class="nav-label">Ranked</span>
+        </div>
+        <div class="nav-item" data-tab="inspiration">
+            <div class="nav-icon">💡</div>
+            <span class="nav-label">Inspiration</span>
+        </div>
+    </div>
+
+    <!-- Floating Action Button (Mobile) -->
+    <button class="fab" id="fab" title="Add Question">+</button>
+
+    <!-- Add Question Modal -->
+    <div class="modal" id="addQuestionModal">
+        <div class="modal-content">
+            <h3>Add New Question</h3>
+            <input type="text" id="questionInput" placeholder="Enter your question...">
+            <div class="modal-buttons">
+                <button id="saveQuestion">Add Question</button>
+                <button id="cancelQuestion">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Idea Modal -->
+    <div class="modal" id="addAnswerModal">
+        <div class="modal-content">
+            <h3>Add Idea to: <span id="answerQuestionTitle"></span></h3>
+            <textarea id="answerInput" placeholder="Enter your idea..."></textarea>
+            <div class="modal-buttons">
+                <button id="saveAnswer">Add Idea</button>
+                <button id="cancelAnswer">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
