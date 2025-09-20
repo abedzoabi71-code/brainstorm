@@ -29,63 +29,58 @@ class BrainstormingApp {
         this.setupMobileNavigation();
         this.setupAutoCleanup();
         this.setupColorDropdownDelegation();
+        this.setupSessionManagement();
         
-        // Auto-login with your credentials
-        await this.autoLogin();
+        // Check authentication
+        await this.checkAuth();
     }
 
-    async autoLogin() {
-        try {
-            // Check if already logged in
-            const { data: { user } } = await this.supabase.auth.getUser();
-            if (user) {
-                this.user = user;
-                this.showApp();
-                await this.loadConceptsFromSupabase();
-                return;
-            }
-
-            // Auto-login with your credentials
-            const { data, error } = await this.supabase.auth.signInWithPassword({
-                email: 'abedzoabi71@gmail.com',
-                password: 'Lazyguyrunforeva71*'
-            });
-
-            if (error) {
-                console.error('Auto-login failed:', error);
-                // If auto-login fails, show the auth modal as fallback
-                this.setupAuthEventListeners();
-                this.showAuthModal();
-                return;
-            }
-
-            this.user = data.user;
-            this.showApp();
-            await this.loadConceptsFromSupabase();
-        } catch (error) {
-            console.error('Auto-login error:', error);
-            // Fallback to manual login
-            this.setupAuthEventListeners();
-            this.showAuthModal();
-        }
+    async checkAuth() {
+        // Always show auth modal - no session persistence
+        this.setupAuthEventListeners();
+        this.showAuthModal();
     }
 
     showAuthModal() {
-        document.getElementById('authModal').classList.add('show');
+        document.getElementById('loginContainer').classList.remove('hidden');
         document.getElementById('appContainer').style.display = 'none';
     }
 
     showApp() {
-        document.getElementById('authModal').classList.remove('show');
+        // Only show app if user is authenticated
+        if (!this.user) {
+            console.error('Cannot show app - no authenticated user');
+            this.showAuthModal();
+            return;
+        }
+        
+        document.getElementById('loginContainer').classList.add('hidden');
         document.getElementById('appContainer').style.display = 'flex';
     }
 
     setupAuthEventListeners() {
-        const authBtn = document.getElementById('authBtn');
+        const authForm = document.getElementById('authForm');
         const emailInput = document.getElementById('emailInput');
         const passwordInput = document.getElementById('passwordInput');
+        const passwordToggle = document.getElementById('passwordToggle');
 
-        authBtn.addEventListener('click', async () => {
+        // Password toggle functionality
+        passwordToggle.addEventListener('click', () => {
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                passwordToggle.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                passwordToggle.textContent = '👁️';
+            }
+        });
+
+        // Don't auto-fill - let Google Chrome handle it
+
+        // Handle form submission
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Prevent form submission to avoid file not found
+            
             const email = emailInput.value;
             const password = passwordInput.value;
             
@@ -103,6 +98,10 @@ class BrainstormingApp {
                 this.user = data.user;
                 this.showApp();
                 await this.loadConceptsFromSupabase();
+                
+                // Clear fields after successful login
+                emailInput.value = '';
+                passwordInput.value = '';
             } catch (error) {
                 alert('Error: ' + error.message);
             }
@@ -111,6 +110,13 @@ class BrainstormingApp {
 
     // Data Management
     async loadConceptsFromSupabase() {
+        // Security check - only load data if authenticated
+        if (!this.user) {
+            console.error('Cannot load data - no authenticated user');
+            this.showAuthModal();
+            return;
+        }
+        
         try {
             // First, clean up any grey ideas that were marked for deletion
             await this.cleanupStoredGreyIdeas();
@@ -146,10 +152,10 @@ class BrainstormingApp {
             }));
 
             this.renderConcepts();
-            
-            // Load first concept if available
-            if (this.concepts.length > 0) {
-                this.switchConcept(this.concepts[0].id);
+        
+        // Load first concept if available
+        if (this.concepts.length > 0) {
+            this.switchConcept(this.concepts[0].id);
             }
         } catch (error) {
             console.error('Error loading concepts:', error);
@@ -255,14 +261,14 @@ class BrainstormingApp {
         if (this.isDarkMode) {
             body.setAttribute('data-theme', 'dark');
             if (themeToggle) {
-                themeToggle.textContent = '☀️';
-                themeToggle.title = 'Switch to Light Mode';
+            themeToggle.textContent = '☀️';
+            themeToggle.title = 'Switch to Light Mode';
             }
         } else {
             body.removeAttribute('data-theme');
             if (themeToggle) {
-                themeToggle.textContent = '🌙';
-                themeToggle.title = 'Switch to Dark Mode';
+            themeToggle.textContent = '🌙';
+            themeToggle.title = 'Switch to Dark Mode';
             }
         }
     }
@@ -349,8 +355,8 @@ class BrainstormingApp {
             if (currentSession) {
                 for (const question of currentSession.questions) {
                     const answer = question.answers.find(a => a.id === answerId);
-                    if (answer) {
-                        answer.color = color;
+        if (answer) {
+            answer.color = color;
                         break;
                     }
                 }
@@ -575,6 +581,22 @@ class BrainstormingApp {
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.cleanupGreyIdeas();
+            }
+        });
+    }
+
+    setupSessionManagement() {
+        // Sign out when page is refreshed or closed to prevent session persistence
+        window.addEventListener('beforeunload', async () => {
+            if (this.user) {
+                await this.supabase.auth.signOut();
+            }
+        });
+
+        // Also sign out when page becomes hidden (tab switch, minimize, etc.)
+        document.addEventListener('visibilitychange', async () => {
+            if (document.hidden && this.user) {
+                await this.supabase.auth.signOut();
             }
         });
     }
@@ -922,7 +944,7 @@ class BrainstormingApp {
             const { data: concept, error: conceptError } = await this.supabase
                 .from('concepts')
                 .insert({
-                    name: name.trim(),
+            name: name.trim(),
                     user_id: this.user.id
                 })
                 .select()
@@ -946,10 +968,10 @@ class BrainstormingApp {
             // Add to local concepts array
             concept.sessions = [session];
             concept.currentSessionId = session.id;
-            this.concepts.push(concept);
+        this.concepts.push(concept);
 
-            this.renderConcepts();
-            this.switchConcept(concept.id);
+        this.renderConcepts();
+        this.switchConcept(concept.id);
         } catch (error) {
             console.error('Error adding concept:', error);
             alert('Error adding concept: ' + error.message);
@@ -1038,27 +1060,27 @@ class BrainstormingApp {
                 if (conceptError) throw conceptError;
 
                 // Update local data
-                this.concepts = this.concepts.filter(c => c.id !== conceptId);
-                this.renderConcepts();
-                
-                if (this.currentConcept && this.currentConcept.id === conceptId) {
-                    this.currentConcept = null;
-                    document.getElementById('currentConceptTitle').textContent = 'Select a concept to start brainstorming';
-                    document.getElementById('brainstormingArea').innerHTML = `
-                        <div class="welcome-message">
-                            <p>Welcome to your brainstorming canvas!</p>
-                            <p>• Press <kbd>Q</kbd> to add a new question</p>
-                            <p>• Press <kbd>A</kbd> to add an answer to the selected question</p>
-                            <p>• Use number keys <kbd>1-5</kbd> to color-rate answers</p>
-                            <p>• Press <kbd>Ctrl+L</kbd> to toggle left panel</p>
-                            <p>• Press <kbd>Ctrl+R</kbd> to toggle right panel</p>
-                        </div>
-                    `;
-                }
-                
-                // If there are still concepts, switch to the first one
-                if (this.concepts.length > 0) {
-                    this.switchConcept(this.concepts[0].id);
+            this.concepts = this.concepts.filter(c => c.id !== conceptId);
+            this.renderConcepts();
+            
+            if (this.currentConcept && this.currentConcept.id === conceptId) {
+                this.currentConcept = null;
+                document.getElementById('currentConceptTitle').textContent = 'Select a concept to start brainstorming';
+                document.getElementById('brainstormingArea').innerHTML = `
+                    <div class="welcome-message">
+                        <p>Welcome to your brainstorming canvas!</p>
+                        <p>• Press <kbd>Q</kbd> to add a new question</p>
+                        <p>• Press <kbd>A</kbd> to add an answer to the selected question</p>
+                        <p>• Use number keys <kbd>1-5</kbd> to color-rate answers</p>
+                        <p>• Press <kbd>Ctrl+L</kbd> to toggle left panel</p>
+                        <p>• Press <kbd>Ctrl+R</kbd> to toggle right panel</p>
+                    </div>
+                `;
+            }
+            
+            // If there are still concepts, switch to the first one
+            if (this.concepts.length > 0) {
+                this.switchConcept(this.concepts[0].id);
                 }
             } catch (error) {
                 console.error('Error deleting concept:', error);
@@ -1129,14 +1151,14 @@ class BrainstormingApp {
             // Add to local data
             const localQuestion = {
                 id: question.id,
-                text: questionText,
-                answers: [],
+            text: questionText,
+            answers: [],
                 createdAt: question.created_at
-            };
+        };
 
             currentSession.questions.push(localQuestion);
-            this.renderBrainstormingArea();
-            this.closeModal('addQuestionModal');
+        this.renderBrainstormingArea();
+        this.closeModal('addQuestionModal');
         } catch (error) {
             console.error('Error saving question:', error);
             alert('Error saving question: ' + error.message);
@@ -1187,17 +1209,17 @@ class BrainstormingApp {
             if (error) throw error;
 
             // Add to local data
-            const answer = {
+        const answer = {
                 id: idea.id,
-                text: answerText,
-                color: 'grey',
+            text: answerText,
+            color: 'grey',
                 createdAt: idea.created_at
-            };
+        };
 
-            this.selectedQuestion.answers.push(answer);
-            this.renderBrainstormingArea();
-            this.closeModal('addAnswerModal');
-            this.selectedQuestion = null;
+        this.selectedQuestion.answers.push(answer);
+        this.renderBrainstormingArea();
+        this.closeModal('addAnswerModal');
+        this.selectedQuestion = null;
         } catch (error) {
             console.error('Error saving answer:', error);
             alert('Error saving idea: ' + error.message);
@@ -1221,13 +1243,13 @@ class BrainstormingApp {
             const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
             if (currentSession) {
                 for (const question of currentSession.questions) {
-                    const answer = question.answers.find(a => a.id === answerId);
-                    if (answer) {
-                        answer.color = color;
-                        break;
-                    }
-                }
+            const answer = question.answers.find(a => a.id === answerId);
+            if (answer) {
+        answer.color = color;
+        break;
             }
+        }
+    }
 
             this.renderBrainstormingArea();
         } catch (error) {
@@ -1296,9 +1318,9 @@ class BrainstormingApp {
                     <div class="answers-container" data-question-id="${question.id}">
                         ${answersHtml}
                     </div>
-                    <button class="add-answer-btn" onclick="event.stopPropagation(); app.addAnswer('${question.id}')">
+                        <button class="add-answer-btn" onclick="event.stopPropagation(); app.addAnswer('${question.id}')">
                         + Add idea...
-                    </button>
+                        </button>
                 </div>
             `;
         } else {
@@ -1339,7 +1361,7 @@ class BrainstormingApp {
                     <div class="answer-controls-mobile" style="display: flex !important; align-items: center !important; gap: 8px !important; position: relative !important;">
                         <div class="answer-color-dot color-${answer.color || 'grey'}" onclick="console.log('Dot clicked!'); app.showColorDropdown('${answer.id}')" style="width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 2px solid var(--bg-secondary) !important; background: ${answer.color === 'grey' ? '#6c757d' : answer.color === 'yellow' ? '#ffc107' : answer.color === 'blue' ? '#007bff' : answer.color === 'purple' ? '#6f42c1' : answer.color === 'green' ? '#28a745' : '#6c757d'} !important; display: block !important; visibility: visible !important; cursor: pointer !important;"></div>
                         <button class="delete-answer-btn hidden" onclick="event.stopPropagation(); app.deleteAnswer('${answer.id}')" title="Delete idea">×</button>
-                        <div class="color-dropdown" id="colorDropdown-${answer.id}">
+                    <div class="color-dropdown" id="colorDropdown-${answer.id}">
                             <div class="color-option color-grey">Trash</div>
                             <div class="color-option color-yellow">Maybe</div>
                             <div class="color-option color-blue">Decent</div>
@@ -1445,7 +1467,7 @@ class BrainstormingApp {
                         text.includes('Removal') || text.includes('"But"')) {
                         this.toggleQuestionTypeExamples(item);
                     } else {
-                        this.addQuestionFromInspiration(text);
+                    this.addQuestionFromInspiration(text);
                     }
                 } else if (type === 'prompt') {
                     this.addAnswerFromInspiration(text);
@@ -1482,13 +1504,13 @@ class BrainstormingApp {
             // Add to local data
             const localQuestion = {
                 id: question.id,
-                text: text,
-                answers: [],
+            text: text,
+            answers: [],
                 createdAt: question.created_at
-            };
+        };
 
             currentSession.questions.push(localQuestion);
-            this.renderBrainstormingArea();
+        this.renderBrainstormingArea();
         } catch (error) {
             console.error('Error saving question from inspiration:', error);
             alert('Error saving question: ' + error.message);
@@ -1602,7 +1624,7 @@ class BrainstormingApp {
             alert('Please select a question first by clicking on it');
             return;
         }
-        
+
         try {
             // Save to Supabase
             const { data: idea, error } = await this.supabase
@@ -1619,15 +1641,15 @@ class BrainstormingApp {
             if (error) throw error;
 
             // Add to local data
-            const answer = {
+        const answer = {
                 id: idea.id,
-                text: text,
-                color: 'grey',
+            text: text,
+            color: 'grey',
                 createdAt: idea.created_at
-            };
-            
-            this.selectedQuestion.answers.push(answer);
-            this.renderBrainstormingArea();
+        };
+
+        this.selectedQuestion.answers.push(answer);
+        this.renderBrainstormingArea();
         } catch (error) {
             console.error('Error saving answer from inspiration:', error);
             alert('Error saving idea: ' + error.message);
@@ -1743,22 +1765,22 @@ class BrainstormingApp {
         const randomizeBtn = document.getElementById('randomizeWords');
         if (randomizeBtn) {
             randomizeBtn.addEventListener('click', () => {
-                const wordList = document.querySelector('#wordsTab .inspiration-list');
+            const wordList = document.querySelector('#wordsTab .inspiration-list');
                 if (wordList) {
-                    const shuffled = [...randomWords].sort(() => Math.random() - 0.5);
-                    
-                    wordList.innerHTML = shuffled.slice(0, 10).map(word => 
-                        `<div class="inspiration-item" data-type="word">${word}</div>`
-                    ).join('');
+            const shuffled = [...randomWords].sort(() => Math.random() - 0.5);
+            
+            wordList.innerHTML = shuffled.slice(0, 10).map(word => 
+                `<div class="inspiration-item" data-type="word">${word}</div>`
+            ).join('');
 
-                    // Re-attach event listeners
-                    wordList.querySelectorAll('.inspiration-item').forEach(item => {
-                        item.addEventListener('click', () => {
-                            this.addAnswerFromInspiration(`Use "${item.textContent}" as inspiration`);
-                        });
-                    });
-                }
+            // Re-attach event listeners
+            wordList.querySelectorAll('.inspiration-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    this.addAnswerFromInspiration(`Use "${item.textContent}" as inspiration`);
+                });
             });
+                }
+        });
         }
     }
 
@@ -1768,24 +1790,24 @@ class BrainstormingApp {
         const filterDropdown = document.getElementById('filterDropdown');
 
         if (filterBtn && filterDropdown) {
-            filterBtn.addEventListener('click', () => {
-                filterDropdown.style.display = filterDropdown.style.display === 'none' ? 'block' : 'none';
-            });
+        filterBtn.addEventListener('click', () => {
+            filterDropdown.style.display = filterDropdown.style.display === 'none' ? 'block' : 'none';
+        });
 
-            filterDropdown.addEventListener('click', (e) => {
-                if (e.target.tagName === 'BUTTON') {
-                    const filter = e.target.dataset.filter;
-                    this.setFilter(filter);
-                    filterDropdown.style.display = 'none';
-                }
-            });
+        filterDropdown.addEventListener('click', (e) => {
+            if (e.target.tagName === 'BUTTON') {
+                const filter = e.target.dataset.filter;
+                this.setFilter(filter);
+                filterDropdown.style.display = 'none';
+            }
+        });
 
-            // Close dropdown when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!filterBtn.contains(e.target) && !filterDropdown.contains(e.target)) {
-                    filterDropdown.style.display = 'none';
-                }
-            });
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!filterBtn.contains(e.target) && !filterDropdown.contains(e.target)) {
+                filterDropdown.style.display = 'none';
+            }
+        });
         }
     }
 
@@ -1796,15 +1818,15 @@ class BrainstormingApp {
         // Update filter button text
         const filterBtn = document.getElementById('filterBtn');
         if (filterBtn) {
-            const filterLabels = {
-                all: 'All Ideas',
-                grey: 'Grey (Trash)',
-                yellow: 'Yellow (Maybe)',
-                blue: 'Blue (Decent)',
-                purple: 'Purple (Strong)',
-                green: 'Green (Keeper)'
-            };
-            filterBtn.textContent = filterLabels[filter] || 'Filter';
+        const filterLabels = {
+            all: 'All Ideas',
+            grey: 'Grey (Trash)',
+            yellow: 'Yellow (Maybe)',
+            blue: 'Blue (Decent)',
+            purple: 'Purple (Strong)',
+            green: 'Green (Keeper)'
+        };
+        filterBtn.textContent = filterLabels[filter] || 'Filter';
         }
     }
 
@@ -1888,23 +1910,23 @@ class BrainstormingApp {
         const toggleLeft = document.getElementById('toggleLeft');
         if (toggleLeft) {
             toggleLeft.addEventListener('click', () => {
-                this.togglePanel('leftPanel');
-            });
+            this.togglePanel('leftPanel');
+        });
         }
 
         const toggleRight = document.getElementById('toggleRight');
         if (toggleRight) {
             toggleRight.addEventListener('click', () => {
-                this.togglePanel('rightPanel');
-            });
+            this.togglePanel('rightPanel');
+        });
         }
 
         // Add concept button
         const addConceptBtn = document.getElementById('addConceptBtn');
         if (addConceptBtn) {
             addConceptBtn.addEventListener('click', () => {
-                this.addConcept();
-            });
+            this.addConcept();
+        });
         }
 
 
@@ -1912,50 +1934,50 @@ class BrainstormingApp {
         const saveQuestionBtn = document.getElementById('saveQuestion');
         if (saveQuestionBtn) {
             saveQuestionBtn.addEventListener('click', () => {
-                this.saveQuestion();
-            });
+            this.saveQuestion();
+        });
         }
 
         const cancelQuestionBtn = document.getElementById('cancelQuestion');
         if (cancelQuestionBtn) {
             cancelQuestionBtn.addEventListener('click', () => {
-                this.closeModal('addQuestionModal');
-            });
+            this.closeModal('addQuestionModal');
+        });
         }
 
         const saveAnswerBtn = document.getElementById('saveAnswer');
         if (saveAnswerBtn) {
             saveAnswerBtn.addEventListener('click', () => {
-                this.saveAnswer();
-            });
+            this.saveAnswer();
+        });
         }
 
         const cancelAnswerBtn = document.getElementById('cancelAnswer');
         if (cancelAnswerBtn) {
             cancelAnswerBtn.addEventListener('click', () => {
-                this.closeModal('addAnswerModal');
-            });
+            this.closeModal('addAnswerModal');
+        });
         }
 
         // Modal input events
         const questionInput = document.getElementById('questionInput');
         if (questionInput) {
             questionInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    this.saveQuestion();
-                } else if (e.key === 'Escape') {
-                    this.closeModal('addQuestionModal');
-                }
-            });
+            if (e.key === 'Enter') {
+                this.saveQuestion();
+            } else if (e.key === 'Escape') {
+                this.closeModal('addQuestionModal');
+            }
+        });
         }
 
         const answerInput = document.getElementById('answerInput');
         if (answerInput) {
             answerInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    this.closeModal('addAnswerModal');
-                }
-            });
+            if (e.key === 'Escape') {
+                this.closeModal('addAnswerModal');
+            }
+        });
         }
 
         // Setup filtering
@@ -1965,8 +1987,8 @@ class BrainstormingApp {
         const themeToggle = document.getElementById('themeToggle');
         if (themeToggle) {
             themeToggle.addEventListener('click', () => {
-                this.toggleTheme();
-            });
+            this.toggleTheme();
+        });
         }
 
         // Mobile navigation
@@ -1976,8 +1998,8 @@ class BrainstormingApp {
         const fab = document.getElementById('fab');
         if (fab) {
             fab.addEventListener('click', () => {
-                this.addQuestion();
-            });
+            this.addQuestion();
+        });
         }
 
         // Duplicate click outside handler removed - using setupClickOutsideDropdowns instead
@@ -1986,7 +2008,7 @@ class BrainstormingApp {
 
 // Initialize the app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    const app = new BrainstormingApp();
+const app = new BrainstormingApp();
     // Make app globally available for debugging
     window.app = app;
 });
