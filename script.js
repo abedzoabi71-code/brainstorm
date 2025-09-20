@@ -75,7 +75,27 @@ class BrainstormingApp {
             }
         });
 
-        // Don't auto-fill - let Google Chrome handle it
+        // Auto-submit when both fields are filled (for password manager)
+        const autoSubmit = () => {
+            if (emailInput.value && passwordInput.value) {
+                // Small delay to ensure fields are fully filled
+                setTimeout(() => {
+                    authForm.dispatchEvent(new Event('submit'));
+                }, 100);
+            }
+        };
+
+        // Listen for input changes to detect auto-fill
+        emailInput.addEventListener('input', autoSubmit);
+        passwordInput.addEventListener('input', autoSubmit);
+        
+        // Also listen for focus events (password managers often trigger these)
+        emailInput.addEventListener('focus', () => {
+            setTimeout(autoSubmit, 200);
+        });
+        passwordInput.addEventListener('focus', () => {
+            setTimeout(autoSubmit, 200);
+        });
 
         // Handle form submission
         authForm.addEventListener('submit', async (e) => {
