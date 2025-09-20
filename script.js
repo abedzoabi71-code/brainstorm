@@ -36,96 +36,15 @@ class BrainstormingApp {
     }
 
     async checkAuth() {
-        // Always show auth modal - no session persistence
-        this.setupAuthEventListeners();
-        this.showAuthModal();
-    }
-
-    showAuthModal() {
-        document.getElementById('loginContainer').classList.remove('hidden');
-        document.getElementById('appContainer').style.display = 'none';
-    }
-
-    showApp() {
-        // Only show app if user is authenticated
-        if (!this.user) {
-            console.error('Cannot show app - no authenticated user');
-            this.showAuthModal();
-            return;
+        // Check if user is already authenticated
+        const { data: { user } } = await this.supabase.auth.getUser();
+        if (user) {
+            this.user = user;
+            await this.loadConceptsFromSupabase();
+        } else {
+            // Redirect to login page
+            window.location.href = 'login.html';
         }
-        
-        document.getElementById('loginContainer').classList.add('hidden');
-        document.getElementById('appContainer').style.display = 'flex';
-    }
-
-    setupAuthEventListeners() {
-        const authForm = document.getElementById('authForm');
-        const emailInput = document.getElementById('emailInput');
-        const passwordInput = document.getElementById('passwordInput');
-        const passwordToggle = document.getElementById('passwordToggle');
-
-        // Password toggle functionality
-        passwordToggle.addEventListener('click', () => {
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                passwordToggle.textContent = '🙈';
-            } else {
-                passwordInput.type = 'password';
-                passwordToggle.textContent = '👁️';
-            }
-        });
-
-        // Auto-submit when both fields are filled (for password manager)
-        const autoSubmit = () => {
-            if (emailInput.value && passwordInput.value) {
-                // Small delay to ensure fields are fully filled
-                setTimeout(() => {
-                    authForm.dispatchEvent(new Event('submit'));
-                }, 100);
-            }
-        };
-
-        // Listen for input changes to detect auto-fill
-        emailInput.addEventListener('input', autoSubmit);
-        passwordInput.addEventListener('input', autoSubmit);
-        
-        // Also listen for focus events (password managers often trigger these)
-        emailInput.addEventListener('focus', () => {
-            setTimeout(autoSubmit, 200);
-        });
-        passwordInput.addEventListener('focus', () => {
-            setTimeout(autoSubmit, 200);
-        });
-
-        // Handle form submission
-        authForm.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Prevent form submission to avoid file not found
-            
-            const email = emailInput.value;
-            const password = passwordInput.value;
-            
-            if (!email || !password) {
-                alert('Please fill in all fields');
-                return;
-            }
-
-            try {
-                const { data, error } = await this.supabase.auth.signInWithPassword({
-                    email,
-                    password
-                });
-                if (error) throw error;
-                this.user = data.user;
-                this.showApp();
-                await this.loadConceptsFromSupabase();
-                
-                // Clear fields after successful login
-                emailInput.value = '';
-                passwordInput.value = '';
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        });
     }
 
     // Data Management
@@ -894,6 +813,12 @@ class BrainstormingApp {
     addSession() {
         if (!this.currentConcept) return;
         
+        // Check if we're on mobile - use inline form instead of prompt
+        if (window.innerWidth <= 768) {
+            this.showInlineSessionForm();
+            return;
+        }
+        
         const sessionName = prompt('Enter session name:');
         if (!sessionName || !sessionName.trim()) return;
         
@@ -938,9 +863,19 @@ class BrainstormingApp {
             case 'concepts':
                 leftPanel.classList.add('mobile-active');
                 leftPanel.style.display = 'flex';
+                // Hide add concept button on mobile
+                const addConceptBtn = document.getElementById('addConceptBtn');
+                if (addConceptBtn) {
+                    addConceptBtn.style.display = 'none';
+                }
                 break;
             case 'canvas':
                 mainCanvas.style.display = 'flex';
+                // Show add concept button when back to canvas
+                const addConceptBtnCanvas = document.getElementById('addConceptBtn');
+                if (addConceptBtnCanvas) {
+                    addConceptBtnCanvas.style.display = 'block';
+                }
                 break;
             case 'ranked':
                 this.showRankedIdeas();
@@ -952,11 +887,34 @@ class BrainstormingApp {
                 break;
         }
     }
-    
 
-    // Concept Management
-    async addConcept() {
-        const name = prompt('Enter concept name:');
+    // Mobile-friendly inline forms
+    showInlineConceptForm() {
+        const addConceptBtn = document.getElementById('addConceptBtn');
+        if (!addConceptBtn) return;
+
+        // Create inline form
+        const form = document.createElement('div');
+        form.className = 'inline-form';
+        form.innerHTML = `
+            <input type="text" placeholder="Concept name" class="inline-input" id="conceptNameInput">
+            <button onclick="app.saveConceptFromInline()" class="inline-save-btn">✓</button>
+            <button onclick="app.cancelInlineForm()" class="inline-cancel-btn">×</button>
+        `;
+
+        // Replace button with form
+        addConceptBtn.style.display = 'none';
+        addConceptBtn.parentNode.insertBefore(form, addConceptBtn);
+
+        // Focus input
+        setTimeout(() => {
+            document.getElementById('conceptNameInput').focus();
+        }, 100);
+    }
+
+    async saveConceptFromInline() {
+        const input = document.getElementById('conceptNameInput');
+        const name = input.value.trim();
         if (!name) return;
 
         try {
@@ -964,7 +922,7 @@ class BrainstormingApp {
             const { data: concept, error: conceptError } = await this.supabase
                 .from('concepts')
                 .insert({
-            name: name.trim(),
+                    name: name,
                     user_id: this.user.id
                 })
                 .select()
@@ -984,6 +942,136 @@ class BrainstormingApp {
                 .single();
 
             if (sessionError) throw sessionError;
+
+            // Add to local concepts array
+            concept.sessions = [session];
+            concept.currentSessionId = session.id;
+            this.concepts.push(concept);
+
+            // Switch to new concept
+            this.switchConcept(concept.id);
+            this.renderConceptList();
+            this.renderBrainstormingArea();
+
+            // Restore button
+            this.cancelInlineForm();
+        } catch (error) {
+            console.error('Error adding concept:', error);
+            alert('Error adding concept: ' + error.message);
+        }
+    }
+
+    cancelInlineForm() {
+        const form = document.querySelector('.inline-form');
+        const addConceptBtn = document.getElementById('addConceptBtn');
+        if (form && addConceptBtn) {
+            form.remove();
+            addConceptBtn.style.display = 'block';
+        }
+    }
+
+    showInlineSessionForm() {
+        const sessionSelector = document.getElementById('sessionSelector');
+        if (!sessionSelector) return;
+
+        // Create inline form
+        const form = document.createElement('div');
+        form.className = 'inline-form';
+        form.innerHTML = `
+            <input type="text" placeholder="Session name" class="inline-input" id="sessionNameInput">
+            <button onclick="app.saveSessionFromInline()" class="inline-save-btn">✓</button>
+            <button onclick="app.cancelInlineSessionForm()" class="inline-cancel-btn">×</button>
+        `;
+
+        // Add form after session selector
+        sessionSelector.parentNode.insertBefore(form, sessionSelector.nextSibling);
+
+        // Focus input
+        setTimeout(() => {
+            document.getElementById('sessionNameInput').focus();
+        }, 100);
+    }
+
+    async saveSessionFromInline() {
+        const input = document.getElementById('sessionNameInput');
+        const sessionName = input.value.trim();
+        if (!sessionName) return;
+
+        try {
+            // Create session in Supabase
+            const { data: session, error } = await this.supabase
+                .from('sessions')
+                .insert({
+                    concept_id: this.currentConcept.id,
+                    name: sessionName,
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            // Add to local concept
+            this.currentConcept.sessions.push(session);
+            this.renderBrainstormingArea();
+
+            // Restore form
+            this.cancelInlineSessionForm();
+        } catch (error) {
+            console.error('Error adding session:', error);
+            alert('Error adding session: ' + error.message);
+        }
+    }
+
+    cancelInlineSessionForm() {
+        const form = document.querySelector('.inline-form');
+        if (form) {
+            form.remove();
+        }
+    }
+
+    // Concept Management
+    async addConcept() {
+        // Check if we're on mobile - use inline form instead of prompt
+        if (window.innerWidth <= 768) {
+            this.showInlineConceptForm();
+            return;
+        }
+        
+        const name = prompt('Enter concept name:');
+        if (!name) return;
+
+        try {
+            // Create concept in Supabase with proper user_id
+            const { data: concept, error: conceptError } = await this.supabase
+                .from('concepts')
+                .insert({
+                    name: name.trim(),
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
+
+            if (conceptError) {
+                console.error('Concept creation error:', conceptError);
+                throw conceptError;
+            }
+
+            // Create first session
+            const { data: session, error: sessionError } = await this.supabase
+                .from('sessions')
+                .insert({
+                    concept_id: concept.id,
+                    name: 'Session 1',
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
+
+            if (sessionError) {
+                console.error('Session creation error:', sessionError);
+                throw sessionError;
+            }
 
             // Add to local concepts array
             concept.sessions = [session];
@@ -1059,8 +1147,12 @@ class BrainstormingApp {
     }
 
     async deleteConcept(conceptId) {
-        if (confirm('Are you sure you want to delete this concept?')) {
-            try {
+        // Skip confirmation on mobile for faster workflow
+        if (window.innerWidth > 768 && !confirm('Are you sure you want to delete this concept?')) {
+            return;
+        }
+        
+        try {
                 // Delete all sessions for this concept from Supabase
                 const { error: sessionsError } = await this.supabase
                     .from('sessions')
@@ -1101,11 +1193,10 @@ class BrainstormingApp {
             // If there are still concepts, switch to the first one
             if (this.concepts.length > 0) {
                 this.switchConcept(this.concepts[0].id);
-                }
-            } catch (error) {
-                console.error('Error deleting concept:', error);
-                alert('Error deleting concept: ' + error.message);
             }
+        } catch (error) {
+            console.error('Error deleting concept:', error);
+            alert('Error deleting concept: ' + error.message);
         }
     }
 
@@ -1137,6 +1228,7 @@ class BrainstormingApp {
         const input = document.getElementById('questionInput');
         
         if (modal) {
+            modal.style.display = 'flex';
             modal.classList.add('show');
             if (input) {
                 input.focus();
@@ -1202,6 +1294,7 @@ class BrainstormingApp {
         const title = document.getElementById('answerQuestionTitle');
         
         title.textContent = question.text;
+        modal.style.display = 'flex';
         modal.classList.add('show');
         input.focus();
         input.value = '';
@@ -1682,8 +1775,12 @@ class BrainstormingApp {
         const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
         if (!currentSession) return;
         
-        if (confirm('Are you sure you want to delete this question and all its ideas?')) {
-            try {
+        // Skip confirmation on mobile for faster workflow
+        if (window.innerWidth > 768 && !confirm('Are you sure you want to delete this question and all its ideas?')) {
+            return;
+        }
+        
+        try {
                 // First delete all ideas for this question from Supabase
                 const { error: ideasError } = await this.supabase
                     .from('ideas')
@@ -1706,10 +1803,9 @@ class BrainstormingApp {
                 currentSession.questions = currentSession.questions.filter(q => q.id !== questionId);
                 
                 this.renderBrainstormingArea();
-            } catch (error) {
-                console.error('Error deleting question:', error);
-                alert('Error deleting question: ' + error.message);
-            }
+        } catch (error) {
+            console.error('Error deleting question:', error);
+            alert('Error deleting question: ' + error.message);
         }
     }
 
@@ -1719,8 +1815,12 @@ class BrainstormingApp {
         const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
         if (!currentSession) return;
         
-        if (confirm('Are you sure you want to delete this idea?')) {
-            try {
+        // Skip confirmation on mobile for faster workflow
+        if (window.innerWidth > 768 && !confirm('Are you sure you want to delete this idea?')) {
+            return;
+        }
+        
+        try {
                 // Delete from Supabase
                 const { error } = await this.supabase
                     .from('ideas')
@@ -1736,10 +1836,9 @@ class BrainstormingApp {
                 });
                 
                 this.renderBrainstormingArea();
-            } catch (error) {
-                console.error('Error deleting answer:', error);
-                alert('Error deleting idea: ' + error.message);
-            }
+        } catch (error) {
+            console.error('Error deleting answer:', error);
+            alert('Error deleting idea: ' + error.message);
         }
     }
 
@@ -1853,7 +1952,10 @@ class BrainstormingApp {
     // Modal Management
     closeModal(modalId) {
         const modal = document.getElementById(modalId);
-        modal.classList.remove('show');
+        if (modal) {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+        }
     }
 
     // Keyboard Shortcuts
