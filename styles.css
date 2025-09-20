@@ -662,8 +662,9 @@ kbd {
     text-overflow: unset;
 }
 
+image.png/* Answer controls - ALWAYS SHOW */
 .answer-controls {
-    display: flex;
+    display: flex !important;
     gap: 5px;
     flex-shrink: 0;
     align-items: center;
@@ -1136,7 +1137,7 @@ kbd {
         background: var(--bg-primary);
         position: relative;
         overflow-y: auto;
-        overflow-x: hidden; /* Remove horizontal scroll */
+        overflow-x: visible; /* Allow dropdowns to show */
         display: block;
         padding: 0;
     }
@@ -1153,6 +1154,7 @@ kbd {
             radial-gradient(circle at 20% 80%, rgba(0, 123, 255, 0.05) 0%, transparent 50%),
             radial-gradient(circle at 80% 20%, rgba(40, 167, 69, 0.05) 0%, transparent 50%);
         pointer-events: none;
+        z-index: -1; /* Put it behind everything */
     }
     
     /* Full screen mobile panels */
@@ -1346,8 +1348,8 @@ kbd {
         display: flex !important;
         align-items: center !important;
         gap: 8px !important; /* Smaller gap */
-        padding: 4px 0 !important; /* Shorter vertically */
-        margin-bottom: 4px !important; /* Add margin between items */
+        padding: 6px 0 !important; /* A little more padding */
+        margin-bottom: 6px !important; /* A little more margin between items */
         border-bottom: 1px solid var(--border-color) !important;
         position: relative !important;
     }
@@ -1379,14 +1381,16 @@ kbd {
     }
     
     .answer-color-dot {
-        width: 14px; /* Smaller color dot */
-        height: 14px;
-        border-radius: 50%;
-        border: 2px solid var(--bg-secondary);
-        flex-shrink: 0;
-        cursor: pointer;
-        position: relative;
-        transition: transform 0.2s ease;
+        width: 14px !important;
+        height: 14px !important;
+        border-radius: 50% !important;
+        border: 2px solid var(--bg-secondary) !important;
+        flex-shrink: 0 !important;
+        cursor: pointer !important;
+        position: relative !important;
+        transition: transform 0.2s ease !important;
+        display: block !important;
+        visibility: visible !important;
     }
     
     .answer-color-dot:hover {
@@ -1413,34 +1417,156 @@ kbd {
         background: #28a745;
     }
     
+    /* Desktop: 5 separate color circles - only show on desktop */
+    @media (min-width: 481px) {
+        .color-circles {
+            display: flex !important;
+            gap: 6px;
+            align-items: center;
+        }
+    }
+    
+    .color-circle {
+        width: 16px !important;
+        height: 16px !important;
+        border-radius: 50% !important;
+        border: 2px solid var(--border-color) !important;
+        cursor: pointer !important;
+        transition: transform 0.2s ease !important;
+        opacity: 0.6 !important;
+        flex-shrink: 0 !important;
+        display: block !important;
+        visibility: visible !important;
+        position: relative !important;
+    }
+    
+    .color-circle:hover {
+        transform: scale(1.2) !important;
+        opacity: 1 !important;
+    }
+    
+    .color-circle.active {
+        opacity: 1 !important;
+        border-color: var(--text-primary) !important;
+        transform: scale(1.1) !important;
+    }
+    
+    .color-circle.color-grey { background: #6c757d !important; }
+    .color-circle.color-yellow { background: #ffc107 !important; }
+    .color-circle.color-blue { background: #007bff !important; }
+    .color-circle.color-purple { background: #6f42c1 !important; }
+    .color-circle.color-green { background: #28a745 !important; }
+    
+    /* Mobile color controls - only show on mobile */
+    @media (max-width: 480px) {
+        .answer-controls-mobile {
+            display: flex !important;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+        }
+        
+        .color-circles {
+            display: none !important;
+        }
+        
+        .answer-controls {
+            display: none !important;
+        }
+        
+        /* Force hide desktop circles on mobile with maximum specificity */
+        .answer-item .answer-controls .color-circles[style*="display: flex"] {
+            display: none !important;
+        }
+        
+        .answer-item .answer-controls[style*="display: flex"] {
+            display: none !important;
+        }
+        
+        /* Force show mobile controls on mobile */
+        .answer-item .answer-controls-mobile {
+            display: flex !important;
+        }
+    }
+    
+    /* Hide mobile controls on desktop */
+    @media (min-width: 481px) {
+        .answer-controls-mobile {
+            display: none !important;
+        }
+    }
+    
     /* Color dropdown */
     .color-dropdown {
-        position: absolute;
-        top: 100%;
-        right: 0;
+        position: fixed;
         background: var(--bg-secondary);
         border: 1px solid var(--border-color);
         border-radius: 8px;
         box-shadow: 0 4px 12px var(--shadow);
-        z-index: 1000;
+        z-index: 9999;
         display: none;
         flex-direction: column;
-        gap: 4px;
-        padding: 8px;
-        margin-top: 4px;
+        gap: 2px;
+        padding: 6px;
+        min-width: 100px;
+        white-space: nowrap;
+        overflow: visible;
+        max-height: none;
+        pointer-events: auto;
     }
     
     .color-dropdown.show {
-        display: flex;
+        display: flex !important;
+        background: var(--bg-secondary) !important;
     }
     
     .color-option {
-        width: 16px; /* Smaller color options */
-        height: 16px;
-        border-radius: 50%;
-        border: 2px solid var(--bg-secondary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 6px;
+        border-radius: 4px;
         cursor: pointer;
-        transition: transform 0.2s ease;
+        transition: background-color 0.2s ease;
+        font-size: 12px;
+        color: var(--text-primary);
+        background: var(--bg-secondary) !important;
+    }
+    
+    .color-option:hover {
+        background: var(--bg-hover) !important;
+    }
+    
+    .color-option::before {
+        content: '';
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 1px solid var(--border-color);
+        flex-shrink: 0;
+    }
+    
+    .color-option.color-grey::before { background: #6c757d; }
+    .color-option.color-yellow::before { background: #ffc107; }
+    .color-option.color-blue::before { background: #007bff; }
+    .color-option.color-purple::before { background: #6f42c1; }
+    .color-option.color-green::before { background: #28a745; }
+    
+    /* Force all color options to have dark background */
+    .color-option.color-grey,
+    .color-option.color-yellow,
+    .color-option.color-blue,
+    .color-option.color-purple,
+    .color-option.color-green {
+        background: var(--bg-secondary) !important;
+    }
+    
+    .color-option.color-grey:hover,
+    .color-option.color-yellow:hover,
+    .color-option.color-blue:hover,
+    .color-option.color-purple:hover,
+    .color-option.color-green:hover {
+        background: var(--bg-hover) !important;
     }
     
     /* Hide add question button on mobile */
