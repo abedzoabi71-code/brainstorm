@@ -59,6 +59,7 @@ body {
     color: var(--text-primary);
     line-height: 1.6;
     transition: background-color 0.3s ease, color 0.3s ease;
+    touch-action: manipulation; /* Prevent zoom on mobile */
 }
 
 /* App container */
@@ -1320,6 +1321,11 @@ image.png/* Answer controls - ALWAYS SHOW */
         display: none;
     }
     
+    /* Prevent zoom on mobile */
+    * {
+        touch-action: manipulation;
+    }
+    
     .bottom-nav {
         display: flex;
         background: var(--bg-secondary);
@@ -1388,7 +1394,8 @@ image.png/* Answer controls - ALWAYS SHOW */
         z-index: 100;
         border: none;
         box-shadow: none;
-        overflow: hidden;
+        overflow: visible; /* Allow scrolling */
+        flex-direction: column;
     }
     
     .left-panel.mobile-active .panel-header,
@@ -1398,16 +1405,25 @@ image.png/* Answer controls - ALWAYS SHOW */
         position: sticky;
         top: 0;
         z-index: 10;
+        justify-content: center; /* Center the header text */
+    }
+    
+    /* Hide toggle buttons on mobile panels */
+    .left-panel.mobile-active .toggle-btn,
+    .right-panel.mobile-active .toggle-btn {
+        display: none;
     }
     
     .left-panel.mobile-active .panel-content,
     .right-panel.mobile-active .panel-content {
         flex: 1;
-        overflow-y: auto;
+        overflow-y: scroll;
         overflow-x: hidden;
         padding: 20px;
         padding-bottom: 40px; /* Extra padding at bottom to prevent nav bar overlap */
         -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        height: calc(100vh - 120px); /* Full height minus header and nav bar */
+        min-height: 0; /* Allow flex shrinking */
     }
     
     .canvas-header {
