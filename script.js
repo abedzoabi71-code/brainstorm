@@ -2,17 +2,24 @@
 class BrainstormingApp {
     constructor() {
         this.currentConcept = null;
-        this.concepts = this.loadConcepts();
+        this.concepts = [];
         this.selectedQuestion = null;
         this.currentFilter = 'all';
         this.isDarkMode = this.loadTheme();
+        this.user = null;
+        this.isSignUp = false;
+        
+        // Initialize Supabase
+        this.supabase = supabase.createClient(
+            'https://jfcykejtgxbmarxmhkbw.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpmY3lrZWp0Z3hibWFyeG1oa2J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMTUzMzYsImV4cCI6MjA3Mzg5MTMzNn0.ZdFZOSiSUum7KmVwMiGA5f8CstvxEUcjGL-bpFPeacI'
+        );
         
         this.init();
     }
 
-    init() {
+    async init() {
         this.setupEventListeners();
-        this.renderConcepts();
         this.setupKeyboardShortcuts();
         this.setupInspirationTabs();
         this.setupRandomWords();
@@ -21,21 +28,156 @@ class BrainstormingApp {
         this.setupClickOutsideDropdowns();
         this.setupMobileNavigation();
         this.setupAutoCleanup();
+        this.setupColorDropdownDelegation();
         
-        // Load first concept if available
-        if (this.concepts.length > 0) {
-            this.switchConcept(this.concepts[0].id);
-        } else {
-            // Ensure we have at least one concept
-            this.loadConcepts();
-            this.renderConcepts();
-            if (this.concepts.length > 0) {
-                this.switchConcept(this.concepts[0].id);
+        // Auto-login with your credentials
+        await this.autoLogin();
+    }
+
+    async autoLogin() {
+        try {
+            // Check if already logged in
+            const { data: { user } } = await this.supabase.auth.getUser();
+            if (user) {
+                this.user = user;
+                this.showApp();
+                await this.loadConceptsFromSupabase();
+                return;
             }
+
+            // Auto-login with your credentials
+            const { data, error } = await this.supabase.auth.signInWithPassword({
+                email: 'abedzoabi71@gmail.com',
+                password: 'Lazyguyrunforeva71*'
+            });
+
+            if (error) {
+                console.error('Auto-login failed:', error);
+                // If auto-login fails, show the auth modal as fallback
+                this.setupAuthEventListeners();
+                this.showAuthModal();
+                return;
+            }
+
+            this.user = data.user;
+            this.showApp();
+            await this.loadConceptsFromSupabase();
+        } catch (error) {
+            console.error('Auto-login error:', error);
+            // Fallback to manual login
+            this.setupAuthEventListeners();
+            this.showAuthModal();
         }
     }
 
+    showAuthModal() {
+        document.getElementById('authModal').classList.add('show');
+        document.getElementById('appContainer').style.display = 'none';
+    }
+
+    showApp() {
+        document.getElementById('authModal').classList.remove('show');
+        document.getElementById('appContainer').style.display = 'flex';
+    }
+
+    setupAuthEventListeners() {
+        const authBtn = document.getElementById('authBtn');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
+
+        authBtn.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            
+            if (!email || !password) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const { data, error } = await this.supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
+                if (error) throw error;
+                this.user = data.user;
+                this.showApp();
+                await this.loadConceptsFromSupabase();
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+    }
+
     // Data Management
+    async loadConceptsFromSupabase() {
+        try {
+            // First, clean up any grey ideas that were marked for deletion
+            await this.cleanupStoredGreyIdeas();
+
+            // Load concepts
+            const { data: concepts, error: conceptsError } = await this.supabase
+                .from('concepts')
+                .select(`
+                    *,
+                    sessions (
+                        *,
+                        questions (
+                            *,
+                            ideas (*)
+                        )
+                    )
+                `)
+                .eq('user_id', this.user.id)
+                .order('created_at', { ascending: false });
+
+            if (conceptsError) throw conceptsError;
+
+            // Map Supabase data structure to local structure
+            this.concepts = (concepts || []).map(concept => ({
+                ...concept,
+                sessions: concept.sessions.map(session => ({
+                    ...session,
+                    questions: session.questions.map(question => ({
+                        ...question,
+                        answers: question.ideas || [] // Map 'ideas' to 'answers'
+                    }))
+                }))
+            }));
+
+            this.renderConcepts();
+            
+            // Load first concept if available
+            if (this.concepts.length > 0) {
+                this.switchConcept(this.concepts[0].id);
+            }
+        } catch (error) {
+            console.error('Error loading concepts:', error);
+            alert('Error loading data: ' + error.message);
+        }
+    }
+
+    async cleanupStoredGreyIdeas() {
+        try {
+            const storedIds = localStorage.getItem('grey-ideas-to-delete');
+            if (storedIds) {
+                const greyIdeaIds = JSON.parse(storedIds);
+                if (greyIdeaIds.length > 0) {
+                    const { error } = await this.supabase
+                        .from('ideas')
+                        .delete()
+                        .in('id', greyIdeaIds)
+                        .eq('user_id', this.user.id);
+
+                    if (error) throw error;
+                }
+                localStorage.removeItem('grey-ideas-to-delete');
+            }
+        } catch (error) {
+            console.error('Error cleaning up stored grey ideas:', error);
+        }
+    }
+
     loadConcepts() {
         const saved = localStorage.getItem('brainstorming-concepts');
         if (saved) {
@@ -136,33 +278,236 @@ class BrainstormingApp {
     }
 
     showColorDropdown(answerId) {
+        console.log('showColorDropdown called for:', answerId);
+        
         // Hide all other dropdowns
         document.querySelectorAll('.color-dropdown').forEach(dropdown => {
             dropdown.classList.remove('show');
+            dropdown.remove(); // Remove from DOM
         });
         
-        // Show this dropdown
-        const dropdown = document.getElementById(`colorDropdown-${answerId}`);
-        if (dropdown) {
+        // Create new dropdown and append to body
+        const dropdown = document.createElement('div');
+        dropdown.className = 'color-dropdown';
+        dropdown.id = `colorDropdown-${answerId}`;
+        dropdown.innerHTML = `
+            <div class="color-option color-grey">Trash</div>
+            <div class="color-option color-yellow">Maybe</div>
+            <div class="color-option color-blue">Decent</div>
+            <div class="color-option color-purple">Strong</div>
+            <div class="color-option color-green">Keeper</div>
+        `;
+        
+        // Append to body
+        document.body.appendChild(dropdown);
+        
+        // Get the position of the color dot
+        const colorDot = document.querySelector(`[onclick*="showColorDropdown('${answerId}')"]`);
+        if (colorDot) {
+            const rect = colorDot.getBoundingClientRect();
+            
+            // Position the dropdown relative to the color dot using fixed positioning
+            dropdown.style.left = (rect.right - 100) + 'px'; // 100px is the dropdown width
+            dropdown.style.top = (rect.bottom + 4) + 'px';
+            dropdown.style.pointerEvents = 'auto'; // Ensure clicks work
+            dropdown.style.position = 'fixed'; // Ensure it's fixed
+            dropdown.style.zIndex = '9999'; // Ensure it's on top
+            
+            // Debug: Log the positioning
+            console.log('Dropdown positioned at:', {
+                left: dropdown.style.left,
+                top: dropdown.style.top,
+                rect: rect
+            });
+            
             dropdown.classList.add('show');
+            console.log('Added show class to dropdown');
+        } else {
+            console.log('Color dot element not found!');
         }
     }
 
-    colorAnswer(answerId, color) {
-        // Hide dropdown
+    async colorAnswer(answerId, color) {
+        // Hide and remove dropdown
         document.querySelectorAll('.color-dropdown').forEach(dropdown => {
             dropdown.classList.remove('show');
+            dropdown.remove(); // Remove from DOM
         });
         
-        // Update answer color
-        const answer = this.currentConcept.questions
-            .flatMap(q => q.answers)
-            .find(a => a.id === answerId);
-        
-        if (answer) {
-            answer.color = color;
+        try {
+            // Update color in Supabase
+            const { error } = await this.supabase
+                .from('ideas')
+                .update({ color: color })
+                .eq('id', answerId)
+                .eq('user_id', this.user.id);
+
+            if (error) throw error;
+
+            // Update local data
+            const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
+            if (currentSession) {
+                for (const question of currentSession.questions) {
+                    const answer = question.answers.find(a => a.id === answerId);
+                    if (answer) {
+                        answer.color = color;
+                        break;
+                    }
+                }
+            }
+
             this.renderBrainstormingArea();
+        } catch (error) {
+            console.error('Error updating answer color:', error);
+            alert('Error updating color: ' + error.message);
         }
+    }
+
+    editAnswer(answerId) {
+        const answerElement = document.querySelector(`[data-answer-id="${answerId}"] .answer-content`);
+        if (!answerElement) return;
+
+        const currentText = answerElement.textContent;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentText;
+        input.className = 'edit-input';
+        input.style.cssText = `
+            width: 100%;
+            padding: 4px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: inherit;
+            font-family: inherit;
+        `;
+
+        // Replace content with input
+        answerElement.innerHTML = '';
+        answerElement.appendChild(input);
+        input.focus();
+        input.select();
+
+        // Handle save on Enter or blur
+        const saveEdit = async () => {
+            const newText = input.value.trim();
+            if (newText && newText !== currentText) {
+                try {
+                    // Update in Supabase
+                    const { error } = await this.supabase
+                        .from('ideas')
+                        .update({ text: newText })
+                        .eq('id', answerId)
+                        .eq('user_id', this.user.id);
+
+                    if (error) throw error;
+
+                    // Update local data
+                    const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
+                    if (currentSession) {
+                        for (const question of currentSession.questions) {
+                            const answer = question.answers.find(a => a.id === answerId);
+                            if (answer) {
+                                answer.text = newText;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Re-render
+                    this.renderBrainstormingArea();
+                } catch (error) {
+                    console.error('Error updating answer:', error);
+                    alert('Error updating idea: ' + error.message);
+                }
+            } else {
+                // Restore original text
+                answerElement.textContent = currentText;
+            }
+        };
+
+        input.addEventListener('blur', saveEdit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                answerElement.textContent = currentText;
+            }
+        });
+    }
+
+    editQuestion(questionId) {
+        const questionElement = document.querySelector(`[data-question-id="${questionId}"]`).previousElementSibling.querySelector('.question-title');
+        if (!questionElement) return;
+
+        const currentText = questionElement.textContent;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentText;
+        input.className = 'edit-input';
+        input.style.cssText = `
+            width: 100%;
+            padding: 4px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: inherit;
+            font-family: inherit;
+        `;
+
+        // Replace content with input
+        questionElement.innerHTML = '';
+        questionElement.appendChild(input);
+        input.focus();
+        input.select();
+
+        // Handle save on Enter or blur
+        const saveEdit = async () => {
+            const newText = input.value.trim();
+            if (newText && newText !== currentText) {
+                try {
+                    // Update in Supabase
+                    const { error } = await this.supabase
+                        .from('questions')
+                        .update({ text: newText })
+                        .eq('id', questionId)
+                        .eq('user_id', this.user.id);
+
+                    if (error) throw error;
+
+                    // Update local data
+                    const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
+                    if (currentSession) {
+                        const question = currentSession.questions.find(q => q.id === questionId);
+                        if (question) {
+                            question.text = newText;
+                        }
+                    }
+
+                    // Re-render
+                    this.renderBrainstormingArea();
+                } catch (error) {
+                    console.error('Error updating question:', error);
+                    alert('Error updating question: ' + error.message);
+                }
+            } else {
+                // Restore original text
+                questionElement.textContent = currentText;
+            }
+        };
+
+        input.addEventListener('blur', saveEdit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                questionElement.textContent = currentText;
+            }
+        });
     }
 
     setupAddQuestionButton() {
@@ -176,10 +521,13 @@ class BrainstormingApp {
 
     setupClickOutsideDropdowns() {
         document.addEventListener('click', (e) => {
-            // Close color dropdowns
-            if (!e.target.closest('.answer-color-dot') && !e.target.closest('.color-dropdown')) {
+            // Close color dropdowns - but NOT if clicking on color options
+            if (!e.target.closest('.answer-color-dot') && 
+                !e.target.closest('.color-dropdown') && 
+                !e.target.classList.contains('color-option')) {
                 document.querySelectorAll('.color-dropdown').forEach(dropdown => {
                     dropdown.classList.remove('show');
+                    dropdown.remove(); // Remove from DOM
                 });
             }
             
@@ -216,7 +564,11 @@ class BrainstormingApp {
     setupAutoCleanup() {
         // Clean up grey ideas when page is about to unload
         window.addEventListener('beforeunload', () => {
-            this.cleanupGreyIdeas();
+            // Store grey idea IDs in localStorage for cleanup on next load
+            const greyIdeaIds = this.getGreyIdeaIds();
+            if (greyIdeaIds.length > 0) {
+                localStorage.setItem('grey-ideas-to-delete', JSON.stringify(greyIdeaIds));
+            }
         });
 
         // Also clean up on page visibility change (when switching tabs)
@@ -227,10 +579,42 @@ class BrainstormingApp {
         });
     }
 
-    cleanupGreyIdeas() {
-        let hasChanges = false;
+    setupColorDropdownDelegation() {
+        // Use event delegation to handle clicks on dynamically generated color options
+        document.addEventListener('click', (e) => {
+            console.log('Click detected on:', e.target, 'Classes:', e.target.classList);
+            
+            if (e.target.classList.contains('color-option')) {
+                console.log('Color option clicked!');
+                e.preventDefault(); // Prevent default behavior
+                e.stopPropagation(); // Stop event from bubbling up
+                e.stopImmediatePropagation(); // Stop other event listeners on same element
+                
+                // Find the parent dropdown to get the answer ID
+                const dropdown = e.target.closest('.color-dropdown');
+                if (dropdown) {
+                    const answerId = dropdown.id.replace('colorDropdown-', '');
+                    
+                    // Determine the color from the class
+                    const color = e.target.classList.contains('color-grey') ? 'grey' :
+                                 e.target.classList.contains('color-yellow') ? 'yellow' :
+                                 e.target.classList.contains('color-blue') ? 'blue' :
+                                 e.target.classList.contains('color-purple') ? 'purple' :
+                                 e.target.classList.contains('color-green') ? 'green' : 'grey';
+                    
+                    console.log('Calling colorAnswer with:', answerId, color);
+                    this.colorAnswer(answerId, color);
+                } else {
+                    console.log('No dropdown found!');
+                }
+            }
+        });
+    }
+
+    getGreyIdeaIds() {
+        const greyIdeaIds = [];
         
-        if (!this.concepts || this.concepts.length === 0) return;
+        if (!this.concepts || this.concepts.length === 0) return greyIdeaIds;
         
         this.concepts.forEach(concept => {
             if (!concept.sessions || concept.sessions.length === 0) return;
@@ -238,25 +622,57 @@ class BrainstormingApp {
             concept.sessions.forEach(session => {
                 if (!session.questions || session.questions.length === 0) return;
                 
-                const originalLength = session.questions.length;
-                session.questions = session.questions.filter(question => {
-                    if (!question.answers || question.answers.length === 0) return false;
+                session.questions.forEach(question => {
+                    if (!question.answers || question.answers.length === 0) return;
                     
-                    const originalAnswersLength = question.answers.length;
-                    question.answers = question.answers.filter(answer => answer.color !== 'grey');
-                    if (question.answers.length !== originalAnswersLength) {
-                        hasChanges = true;
-                    }
-                    return question.answers.length > 0; // Remove questions with no answers
+                    question.answers.forEach(answer => {
+                        if (answer.color === 'grey') {
+                            greyIdeaIds.push(answer.id);
+                        }
+                    });
                 });
-                if (session.questions.length !== originalLength) {
-                    hasChanges = true;
-                }
             });
         });
+        
+        return greyIdeaIds;
+    }
 
-        if (hasChanges) {
-            this.saveConcepts();
+    async cleanupGreyIdeas() {
+        if (!this.concepts || this.concepts.length === 0) return;
+        
+        try {
+            // Collect all grey idea IDs to delete from Supabase
+            const greyIdeaIds = this.getGreyIdeaIds();
+
+            // Delete grey ideas from Supabase
+            if (greyIdeaIds.length > 0) {
+                const { error } = await this.supabase
+                    .from('ideas')
+                    .delete()
+                    .in('id', greyIdeaIds)
+                    .eq('user_id', this.user.id);
+
+                if (error) throw error;
+            }
+
+            // Update local data
+            this.concepts.forEach(concept => {
+                if (!concept.sessions || concept.sessions.length === 0) return;
+                
+                concept.sessions.forEach(session => {
+                    if (!session.questions || session.questions.length === 0) return;
+                    
+                    session.questions = session.questions.filter(question => {
+                        if (!question.answers || question.answers.length === 0) return false;
+                        
+                        question.answers = question.answers.filter(answer => answer.color !== 'grey');
+                        return question.answers.length > 0; // Remove questions with no answers
+                    });
+                });
+            });
+
+        } catch (error) {
+            console.error('Error cleaning up grey ideas:', error);
         }
     }
 
@@ -497,28 +913,47 @@ class BrainstormingApp {
     
 
     // Concept Management
-    addConcept() {
+    async addConcept() {
         const name = prompt('Enter concept name:');
         if (!name) return;
 
-        const concept = {
-            id: this.generateId(),
-            name: name.trim(),
-            sessions: [{
-                id: this.generateId(),
-                name: 'Session 1',
-                questions: [],
-                createdAt: new Date().toISOString()
-            }],
-            currentSessionId: null,
-            createdAt: new Date().toISOString()
-        };
-        concept.currentSessionId = concept.sessions[0].id;
+        try {
+            // Create concept in Supabase
+            const { data: concept, error: conceptError } = await this.supabase
+                .from('concepts')
+                .insert({
+                    name: name.trim(),
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
 
-        this.concepts.push(concept);
-        this.saveConcepts();
-        this.renderConcepts();
-        this.switchConcept(concept.id);
+            if (conceptError) throw conceptError;
+
+            // Create first session
+            const { data: session, error: sessionError } = await this.supabase
+                .from('sessions')
+                .insert({
+                    concept_id: concept.id,
+                    name: 'Session 1',
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
+
+            if (sessionError) throw sessionError;
+
+            // Add to local concepts array
+            concept.sessions = [session];
+            concept.currentSessionId = session.id;
+            this.concepts.push(concept);
+
+            this.renderConcepts();
+            this.switchConcept(concept.id);
+        } catch (error) {
+            console.error('Error adding concept:', error);
+            alert('Error adding concept: ' + error.message);
+        }
     }
 
     switchConcept(conceptId) {
@@ -581,30 +1016,53 @@ class BrainstormingApp {
         });
     }
 
-    deleteConcept(conceptId) {
+    async deleteConcept(conceptId) {
         if (confirm('Are you sure you want to delete this concept?')) {
-            this.concepts = this.concepts.filter(c => c.id !== conceptId);
-            this.saveConcepts();
-            this.renderConcepts();
-            
-            if (this.currentConcept && this.currentConcept.id === conceptId) {
-                this.currentConcept = null;
-                document.getElementById('currentConceptTitle').textContent = 'Select a concept to start brainstorming';
-                document.getElementById('brainstormingArea').innerHTML = `
-                    <div class="welcome-message">
-                        <p>Welcome to your brainstorming canvas!</p>
-                        <p>• Press <kbd>Q</kbd> to add a new question</p>
-                        <p>• Press <kbd>A</kbd> to add an answer to the selected question</p>
-                        <p>• Use number keys <kbd>1-5</kbd> to color-rate answers</p>
-                        <p>• Press <kbd>Ctrl+L</kbd> to toggle left panel</p>
-                        <p>• Press <kbd>Ctrl+R</kbd> to toggle right panel</p>
-                    </div>
-                `;
-            }
-            
-            // If there are still concepts, switch to the first one
-            if (this.concepts.length > 0) {
-                this.switchConcept(this.concepts[0].id);
+            try {
+                // Delete all sessions for this concept from Supabase
+                const { error: sessionsError } = await this.supabase
+                    .from('sessions')
+                    .delete()
+                    .eq('concept_id', conceptId)
+                    .eq('user_id', this.user.id);
+
+                if (sessionsError) throw sessionsError;
+
+                // Delete the concept from Supabase
+                const { error: conceptError } = await this.supabase
+                    .from('concepts')
+                    .delete()
+                    .eq('id', conceptId)
+                    .eq('user_id', this.user.id);
+
+                if (conceptError) throw conceptError;
+
+                // Update local data
+                this.concepts = this.concepts.filter(c => c.id !== conceptId);
+                this.renderConcepts();
+                
+                if (this.currentConcept && this.currentConcept.id === conceptId) {
+                    this.currentConcept = null;
+                    document.getElementById('currentConceptTitle').textContent = 'Select a concept to start brainstorming';
+                    document.getElementById('brainstormingArea').innerHTML = `
+                        <div class="welcome-message">
+                            <p>Welcome to your brainstorming canvas!</p>
+                            <p>• Press <kbd>Q</kbd> to add a new question</p>
+                            <p>• Press <kbd>A</kbd> to add an answer to the selected question</p>
+                            <p>• Use number keys <kbd>1-5</kbd> to color-rate answers</p>
+                            <p>• Press <kbd>Ctrl+L</kbd> to toggle left panel</p>
+                            <p>• Press <kbd>Ctrl+R</kbd> to toggle right panel</p>
+                        </div>
+                    `;
+                }
+                
+                // If there are still concepts, switch to the first one
+                if (this.concepts.length > 0) {
+                    this.switchConcept(this.concepts[0].id);
+                }
+            } catch (error) {
+                console.error('Error deleting concept:', error);
+                alert('Error deleting concept: ' + error.message);
             }
         }
     }
@@ -645,7 +1103,7 @@ class BrainstormingApp {
         }
     }
 
-    saveQuestion() {
+    async saveQuestion() {
         const input = document.getElementById('questionInput');
         const questionText = input.value.trim();
         
@@ -654,17 +1112,35 @@ class BrainstormingApp {
         const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
         if (!currentSession) return;
 
-        const question = {
-            id: this.generateId(),
-            text: questionText,
-            answers: [],
-            createdAt: new Date().toISOString()
-        };
+        try {
+            // Save question to Supabase
+            const { data: question, error } = await this.supabase
+                .from('questions')
+                .insert({
+                    session_id: currentSession.id,
+                    text: questionText,
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
 
-        currentSession.questions.push(question);
-        this.saveConcepts();
-        this.renderBrainstormingArea();
-        this.closeModal('addQuestionModal');
+            if (error) throw error;
+
+            // Add to local data
+            const localQuestion = {
+                id: question.id,
+                text: questionText,
+                answers: [],
+                createdAt: question.created_at
+            };
+
+            currentSession.questions.push(localQuestion);
+            this.renderBrainstormingArea();
+            this.closeModal('addQuestionModal');
+        } catch (error) {
+            console.error('Error saving question:', error);
+            alert('Error saving question: ' + error.message);
+        }
     }
 
     // Answer Management
@@ -689,57 +1165,78 @@ class BrainstormingApp {
         input.value = '';
     }
 
-    saveAnswer() {
+    async saveAnswer() {
         const input = document.getElementById('answerInput');
         const answerText = input.value.trim();
         
         if (!answerText || !this.selectedQuestion) return;
 
-        const answer = {
-            id: this.generateId(),
-            text: answerText,
-            color: 'grey',
-            createdAt: new Date().toISOString()
-        };
+        try {
+            // Save to Supabase (let Supabase generate the UUID)
+            const { data: idea, error } = await this.supabase
+                .from('ideas')
+                .insert({
+                    question_id: this.selectedQuestion.id,
+                    text: answerText,
+                    color: 'grey',
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
 
-        this.selectedQuestion.answers.push(answer);
-        this.saveConcepts();
-        this.renderBrainstormingArea();
-        this.closeModal('addAnswerModal');
-        this.selectedQuestion = null;
+            if (error) throw error;
+
+            // Add to local data
+            const answer = {
+                id: idea.id,
+                text: answerText,
+                color: 'grey',
+                createdAt: idea.created_at
+            };
+
+            this.selectedQuestion.answers.push(answer);
+            this.renderBrainstormingArea();
+            this.closeModal('addAnswerModal');
+            this.selectedQuestion = null;
+        } catch (error) {
+            console.error('Error saving answer:', error);
+            alert('Error saving idea: ' + error.message);
+        }
     }
 
-    setAnswerColor(answerId, color) {
+    async setAnswerColor(answerId, color) {
         if (!this.currentConcept) return;
 
-        const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
-        if (!currentSession) return;
+        try {
+            // Update color in Supabase
+            const { error } = await this.supabase
+                .from('ideas')
+                .update({ color: color })
+                .eq('id', answerId)
+                .eq('user_id', this.user.id);
 
-        for (const question of currentSession.questions) {
-            const answer = question.answers.find(a => a.id === answerId);
-            if (answer) {
-                answer.color = color;
-                this.saveConcepts();
-                this.renderBrainstormingArea();
-                break;
-            }
-        }
-    }
+            if (error) throw error;
 
-    toggleColorDropdown(answerId) {
-        const dropdown = document.getElementById(`colorDropdown-${answerId}`);
-        if (dropdown) {
-            // Close all other dropdowns
-            document.querySelectorAll('.color-dropdown').forEach(dd => {
-                if (dd.id !== `colorDropdown-${answerId}`) {
-                    dd.style.display = 'none';
+            // Update local data
+            const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
+            if (currentSession) {
+                for (const question of currentSession.questions) {
+                    const answer = question.answers.find(a => a.id === answerId);
+                    if (answer) {
+                        answer.color = color;
+                        break;
+                    }
                 }
-            });
-            
-            // Toggle current dropdown
-            dropdown.style.display = dropdown.style.display === 'none' ? 'flex' : 'none';
+            }
+
+            this.renderBrainstormingArea();
+        } catch (error) {
+            console.error('Error updating answer color:', error);
+            alert('Error updating color: ' + error.message);
         }
     }
+
+    // toggleColorDropdown function removed - using showColorDropdown instead
 
     // Rendering
     renderBrainstormingArea() {
@@ -758,16 +1255,30 @@ class BrainstormingApp {
             return;
         }
 
-        area.innerHTML = currentSession.questions.map(question => 
+        console.log('Rendering brainstorming area with', currentSession.questions.length, 'questions');
+        
+        const html = currentSession.questions.map(question => 
             this.renderQuestion(question)
         ).join('');
+        
+        console.log('Generated HTML:', html);
+        area.innerHTML = html;
+        
+        // Check if color circles exist after insertion
+        setTimeout(() => {
+            const circles = area.querySelectorAll('.color-circle');
+            console.log('Found', circles.length, 'color circles in DOM');
+        }, 100);
     }
 
     renderQuestion(question) {
-        const answersHtml = question.answers
-            .filter(answer => this.shouldShowAnswer(answer))
+        console.log('Rendering question:', question.text, 'with', question.answers.length, 'answers');
+        const filteredAnswers = question.answers.filter(answer => this.shouldShowAnswer(answer));
+        console.log('Filtered answers:', filteredAnswers.length);
+        const answersHtml = filteredAnswers
             .map((answer, index) => this.renderAnswer(answer, index + 1))
             .join('');
+        console.log('Generated answers HTML length:', answersHtml.length);
 
         const isMobile = window.innerWidth <= 480;
         
@@ -777,7 +1288,7 @@ class BrainstormingApp {
                 <div class="question-block">
                     <div class="question-header">
                         <div class="question-prefix">Q</div>
-                        <div class="question-title">
+                        <div class="question-title" ondblclick="app.editQuestion('${question.id}')">
                             ${question.text}
                         </div>
                         <button class="delete-question-btn" onclick="event.stopPropagation(); app.deleteQuestion('${question.id}')" title="Delete question">×</button>
@@ -796,7 +1307,7 @@ class BrainstormingApp {
                 <div class="question-block">
                     <div class="question-header">
                         <div class="question-prefix">Q</div>
-                        <div class="question-title">${question.text}</div>
+                        <div class="question-title" ondblclick="app.editQuestion('${question.id}')">${question.text}</div>
                         <button class="delete-question-btn" onclick="event.stopPropagation(); app.deleteQuestion('${question.id}')" title="Delete question">×</button>
                     </div>
                     <div class="answers-container" data-question-id="${question.id}">
@@ -811,50 +1322,57 @@ class BrainstormingApp {
     }
 
     renderAnswer(answer, number) {
-        const isMobile = window.innerWidth <= 480;
+        console.log('Rendering answer:', answer.text, 'window.innerWidth:', window.innerWidth, 'isMobile:', window.innerWidth <= 480);
+        // More reliable mobile detection
+        const isMobile = window.innerWidth <= 480 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
         if (isMobile) {
-            // Mobile: Small number, full-width text, colored dot with dropdown
+            console.log('Taking MOBILE code path');
+            // Mobile: Small number, full-width text, 1 colored dot with dropdown
             const isLongText = answer.text.length > 50;
             const contentClass = isLongText ? 'answer-content truncated' : 'answer-content';
             
             return `
                 <div class="answer-item color-${answer.color || 'grey'}" data-answer-id="${answer.id}">
                     <div class="answer-number">${number}</div>
-                    <div class="${contentClass}" onclick="app.toggleAnswerExpansion('${answer.id}'); app.showDeleteButton('${answer.id}')" data-full-text="${answer.text}">${answer.text}</div>
-                    <div class="answer-color-dot color-${answer.color || 'grey'}" onclick="app.showColorDropdown('${answer.id}')"></div>
-                    <button class="delete-answer-btn hidden" onclick="event.stopPropagation(); app.deleteAnswer('${answer.id}')" title="Delete idea">×</button>
-                    <div class="color-dropdown" id="colorDropdown-${answer.id}">
-                        <div class="color-option color-grey" onclick="app.colorAnswer('${answer.id}', 'grey')"></div>
-                        <div class="color-option color-yellow" onclick="app.colorAnswer('${answer.id}', 'yellow')"></div>
-                        <div class="color-option color-blue" onclick="app.colorAnswer('${answer.id}', 'blue')"></div>
-                        <div class="color-option color-purple" onclick="app.colorAnswer('${answer.id}', 'purple')"></div>
-                        <div class="color-option color-green" onclick="app.colorAnswer('${answer.id}', 'green')"></div>
-                    </div>
-                </div>
-            `;
-        } else {
-            // Desktop: Single color dot with dropdown
-            const isLongText = answer.text.length > 50;
-            const contentClass = isLongText ? 'answer-content truncated' : 'answer-content';
-            
-            return `
-                <div class="answer-item ${answer.color ? `color-${answer.color}` : ''}" data-answer-id="${answer.id}">
-                    <div class="answer-number">${number}</div>
-                    <div class="${contentClass}" onclick="app.toggleAnswerExpansion('${answer.id}')" data-full-text="${answer.text}">${answer.text}</div>
-                    <div class="answer-controls">
-                        <div class="answer-color-dot color-${answer.color || 'grey'}" onclick="app.showColorDropdown('${answer.id}')"></div>
-                        <button class="delete-answer-btn" onclick="event.stopPropagation(); app.deleteAnswer('${answer.id}')" title="Delete idea">×</button>
+                    <div class="${contentClass}" onclick="app.toggleAnswerExpansion('${answer.id}'); app.showDeleteButton('${answer.id}')" ondblclick="app.editAnswer('${answer.id}')" data-full-text="${answer.text}">${answer.text}</div>
+                    <div class="answer-controls-mobile" style="display: flex !important; align-items: center !important; gap: 8px !important; position: relative !important;">
+                        <div class="answer-color-dot color-${answer.color || 'grey'}" onclick="console.log('Dot clicked!'); app.showColorDropdown('${answer.id}')" style="width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 2px solid var(--bg-secondary) !important; background: ${answer.color === 'grey' ? '#6c757d' : answer.color === 'yellow' ? '#ffc107' : answer.color === 'blue' ? '#007bff' : answer.color === 'purple' ? '#6f42c1' : answer.color === 'green' ? '#28a745' : '#6c757d'} !important; display: block !important; visibility: visible !important; cursor: pointer !important;"></div>
+                        <button class="delete-answer-btn hidden" onclick="event.stopPropagation(); app.deleteAnswer('${answer.id}')" title="Delete idea">×</button>
                         <div class="color-dropdown" id="colorDropdown-${answer.id}">
-                            <div class="color-option color-grey" onclick="app.colorAnswer('${answer.id}', 'grey')"></div>
-                            <div class="color-option color-yellow" onclick="app.colorAnswer('${answer.id}', 'yellow')"></div>
-                            <div class="color-option color-blue" onclick="app.colorAnswer('${answer.id}', 'blue')"></div>
-                            <div class="color-option color-purple" onclick="app.colorAnswer('${answer.id}', 'purple')"></div>
-                            <div class="color-option color-green" onclick="app.colorAnswer('${answer.id}', 'green')"></div>
+                            <div class="color-option color-grey">Trash</div>
+                            <div class="color-option color-yellow">Maybe</div>
+                            <div class="color-option color-blue">Decent</div>
+                            <div class="color-option color-purple">Strong</div>
+                            <div class="color-option color-green">Keeper</div>
                         </div>
                     </div>
                 </div>
             `;
+        } else {
+            console.log('Taking DESKTOP code path');
+            // Desktop: 5 separate color circles
+            const isLongText = answer.text.length > 50;
+            const contentClass = isLongText ? 'answer-content truncated' : 'answer-content';
+            
+            const html = `
+                <div class="answer-item ${answer.color ? `color-${answer.color}` : ''}" data-answer-id="${answer.id}">
+                    <div class="answer-number">${number}</div>
+                    <div class="${contentClass}" onclick="app.toggleAnswerExpansion('${answer.id}')" ondblclick="app.editAnswer('${answer.id}')" data-full-text="${answer.text}">${answer.text}</div>
+                    <div class="answer-controls" style="display: flex !important; gap: 5px !important; flex-shrink: 0 !important; align-items: center !important;">
+                        <div class="color-circles" style="display: flex !important; gap: 6px !important; align-items: center !important;">
+                            <div class="color-circle color-grey ${answer.color === 'grey' ? 'active' : ''}" onclick="app.colorAnswer('${answer.id}', 'grey')" title="Trash" style="width: 16px !important; height: 16px !important; border-radius: 50% !important; border: 2px solid var(--border-color) !important; background: #6c757d !important; display: block !important; visibility: visible !important; cursor: pointer !important; opacity: ${answer.color === 'grey' ? '1' : '0.6'} !important;"></div>
+                            <div class="color-circle color-yellow ${answer.color === 'yellow' ? 'active' : ''}" onclick="app.colorAnswer('${answer.id}', 'yellow')" title="Maybe" style="width: 16px !important; height: 16px !important; border-radius: 50% !important; border: 2px solid var(--border-color) !important; background: #ffc107 !important; display: block !important; visibility: visible !important; cursor: pointer !important; opacity: ${answer.color === 'yellow' ? '1' : '0.6'} !important;"></div>
+                            <div class="color-circle color-blue ${answer.color === 'blue' ? 'active' : ''}" onclick="app.colorAnswer('${answer.id}', 'blue')" title="Decent" style="width: 16px !important; height: 16px !important; border-radius: 50% !important; border: 2px solid var(--border-color) !important; background: #007bff !important; display: block !important; visibility: visible !important; cursor: pointer !important; opacity: ${answer.color === 'blue' ? '1' : '0.6'} !important;"></div>
+                            <div class="color-circle color-purple ${answer.color === 'purple' ? 'active' : ''}" onclick="app.colorAnswer('${answer.id}', 'purple')" title="Strong" style="width: 16px !important; height: 16px !important; border-radius: 50% !important; border: 2px solid var(--border-color) !important; background: #6f42c1 !important; display: block !important; visibility: visible !important; cursor: pointer !important; opacity: ${answer.color === 'purple' ? '1' : '0.6'} !important;"></div>
+                            <div class="color-circle color-green ${answer.color === 'green' ? 'active' : ''}" onclick="app.colorAnswer('${answer.id}', 'green')" title="Keeper" style="width: 16px !important; height: 16px !important; border-radius: 50% !important; border: 2px solid var(--border-color) !important; background: #28a745 !important; display: block !important; visibility: visible !important; cursor: pointer !important; opacity: ${answer.color === 'green' ? '1' : '0.6'} !important;"></div>
+                        </div>
+                        <button class="delete-answer-btn" onclick="event.stopPropagation(); app.deleteAnswer('${answer.id}')" title="Delete idea">×</button>
+                    </div>
+                </div>
+            `;
+            console.log('Desktop HTML generated:', html);
+            return html;
         }
     }
 
@@ -938,7 +1456,7 @@ class BrainstormingApp {
         });
     }
 
-    addQuestionFromInspiration(text) {
+    async addQuestionFromInspiration(text) {
         if (!this.currentConcept) {
             alert('Please select a concept first');
             return;
@@ -947,16 +1465,34 @@ class BrainstormingApp {
         const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
         if (!currentSession) return;
 
-        const question = {
-            id: this.generateId(),
-            text: text,
-            answers: [],
-            createdAt: new Date().toISOString()
-        };
+        try {
+            // Save question to Supabase
+            const { data: question, error } = await this.supabase
+                .from('questions')
+                .insert({
+                    session_id: currentSession.id,
+                    text: text,
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
 
-        currentSession.questions.push(question);
-        this.saveConcepts();
-        this.renderBrainstormingArea();
+            if (error) throw error;
+
+            // Add to local data
+            const localQuestion = {
+                id: question.id,
+                text: text,
+                answers: [],
+                createdAt: question.created_at
+            };
+
+            currentSession.questions.push(localQuestion);
+            this.renderBrainstormingArea();
+        } catch (error) {
+            console.error('Error saving question from inspiration:', error);
+            alert('Error saving question: ' + error.message);
+        }
     }
 
     toggleQuestionTypeExamples(item) {
@@ -1061,49 +1597,107 @@ class BrainstormingApp {
         return questionTemplates[type] || [];
     }
 
-    addAnswerFromInspiration(text) {
+    async addAnswerFromInspiration(text) {
         if (!this.selectedQuestion) {
             alert('Please select a question first by clicking on it');
             return;
         }
         
-        const answer = {
-            id: this.generateId(),
-            text: text,
-            color: 'grey',
-            createdAt: new Date().toISOString()
-        };
-        
-        this.selectedQuestion.answers.push(answer);
-        this.saveConcepts();
-        this.renderBrainstormingArea();
+        try {
+            // Save to Supabase
+            const { data: idea, error } = await this.supabase
+                .from('ideas')
+                .insert({
+                    question_id: this.selectedQuestion.id,
+                    text: text,
+                    color: 'grey',
+                    user_id: this.user.id
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            // Add to local data
+            const answer = {
+                id: idea.id,
+                text: text,
+                color: 'grey',
+                createdAt: idea.created_at
+            };
+            
+            this.selectedQuestion.answers.push(answer);
+            this.renderBrainstormingArea();
+        } catch (error) {
+            console.error('Error saving answer from inspiration:', error);
+            alert('Error saving idea: ' + error.message);
+        }
     }
 
-    deleteQuestion(questionId) {
+    async deleteQuestion(questionId) {
         if (!this.currentConcept) return;
         
         const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
         if (!currentSession) return;
         
         if (confirm('Are you sure you want to delete this question and all its ideas?')) {
-            currentSession.questions = currentSession.questions.filter(q => q.id !== questionId);
-            this.saveConcepts();
-            this.renderBrainstormingArea();
+            try {
+                // First delete all ideas for this question from Supabase
+                const { error: ideasError } = await this.supabase
+                    .from('ideas')
+                    .delete()
+                    .eq('question_id', questionId)
+                    .eq('user_id', this.user.id);
+
+                if (ideasError) throw ideasError;
+
+                // Then delete the question from Supabase
+                const { error: questionError } = await this.supabase
+                    .from('questions')
+                    .delete()
+                    .eq('id', questionId)
+                    .eq('user_id', this.user.id);
+
+                if (questionError) throw questionError;
+
+                // Update local data
+                currentSession.questions = currentSession.questions.filter(q => q.id !== questionId);
+                
+                this.renderBrainstormingArea();
+            } catch (error) {
+                console.error('Error deleting question:', error);
+                alert('Error deleting question: ' + error.message);
+            }
         }
     }
 
-    deleteAnswer(answerId) {
+    async deleteAnswer(answerId) {
         if (!this.currentConcept) return;
         
         const currentSession = this.currentConcept.sessions.find(s => s.id === this.currentConcept.currentSessionId);
         if (!currentSession) return;
         
         if (confirm('Are you sure you want to delete this idea?')) {
-            currentSession.questions.forEach(question => {
-                question.answers = question.answers.filter(a => a.id !== answerId);
-            });
-            this.saveConcepts();
-            this.renderBrainstormingArea();
+            try {
+                // Delete from Supabase
+                const { error } = await this.supabase
+                    .from('ideas')
+                    .delete()
+                    .eq('id', answerId)
+                    .eq('user_id', this.user.id);
+
+                if (error) throw error;
+
+                // Update local data
+                currentSession.questions.forEach(question => {
+                    question.answers = question.answers.filter(a => a.id !== answerId);
+                });
+                
+                this.renderBrainstormingArea();
+            } catch (error) {
+                console.error('Error deleting answer:', error);
+                alert('Error deleting idea: ' + error.message);
+            }
         }
     }
 
@@ -1134,19 +1728,6 @@ class BrainstormingApp {
         const deleteBtn = document.querySelector(`[data-answer-id="${answerId}"] .delete-answer-btn`);
         if (deleteBtn) {
             deleteBtn.classList.remove('hidden');
-        }
-    }
-
-    showColorDropdown(answerId) {
-        // Hide all other dropdowns
-        document.querySelectorAll('.color-dropdown').forEach(dropdown => {
-            dropdown.classList.remove('show');
-        });
-        
-        // Show this dropdown
-        const dropdown = document.getElementById(`colorDropdown-${answerId}`);
-        if (dropdown) {
-            dropdown.classList.add('show');
         }
     }
 
@@ -1399,14 +1980,7 @@ class BrainstormingApp {
             });
         }
 
-        // Close color dropdowns when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.color-dropdown-container')) {
-                document.querySelectorAll('.color-dropdown').forEach(dropdown => {
-                    dropdown.style.display = 'none';
-                });
-            }
-        });
+        // Duplicate click outside handler removed - using setupClickOutsideDropdowns instead
     }
 }
 
