@@ -491,6 +491,11 @@ class BrainstormingApp {
                     content.classList.add('truncated');
                 });
             }
+            
+            // Hide delete buttons when clicking outside answer items
+            if (!e.target.closest('.answer-item')) {
+                this.hideAllDeleteButtons();
+            }
         });
     }
 
@@ -1125,7 +1130,7 @@ class BrainstormingApp {
             conceptItem.innerHTML = `
                 <span class="concept-name">${concept.name}</span>
                 <div class="concept-controls">
-                    <button class="concept-btn delete-btn" data-concept-id="${concept.id}" title="Delete">🗑️</button>
+                    <button class="concept-btn delete-btn" data-concept-id="${concept.id}" title="Delete">×</button>
                 </div>
             `;
             
@@ -1147,8 +1152,8 @@ class BrainstormingApp {
     }
 
     async deleteConcept(conceptId) {
-        // Skip confirmation on mobile for faster workflow
-        if (window.innerWidth > 768 && !confirm('Are you sure you want to delete this concept?')) {
+        // Always show confirmation for concept deletion
+        if (!confirm('Are you sure you want to delete this concept? This will permanently delete all sessions and ideas in this concept.')) {
             return;
         }
         
@@ -1870,6 +1875,13 @@ class BrainstormingApp {
         if (deleteBtn) {
             deleteBtn.classList.remove('hidden');
         }
+    }
+    
+    hideAllDeleteButtons() {
+        // Hide all delete buttons
+        document.querySelectorAll('.delete-answer-btn').forEach(btn => {
+            btn.classList.add('hidden');
+        });
     }
 
     setupRandomWords() {
