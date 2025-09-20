@@ -746,13 +746,14 @@ image.png/* Answer controls - ALWAYS SHOW */
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 15px;
-    margin-bottom: 8px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s, background-color 0.3s ease, border-color 0.3s ease;
+    min-height: 36px;
 }
 
 .concept-item:hover {
@@ -782,14 +783,28 @@ image.png/* Answer controls - ALWAYS SHOW */
     background: none;
     border: none;
     cursor: pointer;
-    padding: 4px;
+    padding: 4px 6px;
     border-radius: 3px;
-    font-size: 12px;
-    transition: background-color 0.2s;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
 }
 
 .concept-btn:hover {
-    background-color: rgba(255,255,255,0.2);
+    background-color: rgba(255, 71, 87, 0.1);
+    color: #ff4757;
+}
+
+.concept-btn.delete-btn {
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.concept-btn.delete-btn:hover {
+    background-color: rgba(255, 71, 87, 0.1);
+    color: #ff4757;
 }
 
 .add-concept-btn {
@@ -1148,9 +1163,10 @@ image.png/* Answer controls - ALWAYS SHOW */
     right: 0;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
-    padding: 8px 0;
+    padding: 6px 0;
     z-index: 1000;
     transition: background-color 0.3s ease, border-color 0.3s ease;
+    height: 60px; /* Fixed height to make it smaller */
 }
 
 .bottom-nav .nav-item {
@@ -1158,9 +1174,10 @@ image.png/* Answer controls - ALWAYS SHOW */
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px 4px;
+    padding: 4px 2px;
     cursor: pointer;
     transition: opacity 0.2s;
+    justify-content: center;
 }
 
 .bottom-nav .nav-item.active {
@@ -1172,14 +1189,20 @@ image.png/* Answer controls - ALWAYS SHOW */
 }
 
 .bottom-nav .nav-icon {
-    font-size: 20px;
-    margin-bottom: 4px;
+    font-size: 16px;
+    margin-bottom: 2px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .bottom-nav .nav-label {
-    font-size: 12px;
+    font-size: 10px;
     color: var(--text-primary);
     transition: color 0.3s ease;
+    line-height: 1;
 }
 
 .bottom-nav .nav-item.active .nav-label {
@@ -1188,6 +1211,54 @@ image.png/* Answer controls - ALWAYS SHOW */
 
 [data-theme="dark"] .bottom-nav .nav-item.active .nav-label {
     color: #60a5fa;
+}
+
+/* Flat color icons for navigation */
+.icon-folder {
+    background: var(--text-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/%3E%3C/svg%3E") no-repeat center;
+    mask-size: contain;
+    width: 18px;
+    height: 18px;
+}
+
+.icon-canvas {
+    background: var(--text-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/%3E%3Cpolyline points='14,2 14,8 20,8'/%3E%3Cline x1='16' y1='13' x2='8' y2='13'/%3E%3Cline x1='16' y1='17' x2='8' y2='17'/%3E%3Cpolyline points='10,9 9,9 8,9'/%3E%3C/svg%3E") no-repeat center;
+    mask-size: contain;
+    width: 18px;
+    height: 18px;
+}
+
+.icon-star {
+    background: var(--text-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26'/%3E%3C/svg%3E") no-repeat center;
+    mask-size: contain;
+    width: 18px;
+    height: 18px;
+}
+
+.icon-lightbulb {
+    background: var(--text-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1z'/%3E%3Cpath d='M12 2C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z'/%3E%3C/svg%3E") no-repeat center;
+    mask-size: contain;
+    width: 18px;
+    height: 18px;
+}
+
+/* Active state for icons */
+.bottom-nav .nav-item.active .icon-folder,
+.bottom-nav .nav-item.active .icon-canvas,
+.bottom-nav .nav-item.active .icon-star,
+.bottom-nav .nav-item.active .icon-lightbulb {
+    background: #007bff;
+}
+
+[data-theme="dark"] .bottom-nav .nav-item.active .icon-folder,
+[data-theme="dark"] .bottom-nav .nav-item.active .icon-canvas,
+[data-theme="dark"] .bottom-nav .nav-item.active .icon-star,
+[data-theme="dark"] .bottom-nav .nav-item.active .icon-lightbulb {
+    background: #60a5fa;
 }
 
 /* Floating Action Button */
@@ -1272,20 +1343,21 @@ image.png/* Answer controls - ALWAYS SHOW */
     .app-container {
         flex-direction: column;
         height: 100vh;
-        padding-bottom: 60px;
+        padding-bottom: 60px; /* Match nav bar height */
         overflow-x: hidden; /* Remove horizontal scroll */
     }
     
     .main-canvas {
         flex: 1;
         width: 100%;
-        height: calc(100vh - 60px);
+        height: calc(100vh - 60px); /* Match nav bar height */
         background: var(--bg-primary);
         position: relative;
         overflow-y: auto;
         overflow-x: visible; /* Allow dropdowns to show */
         display: block;
         padding: 0;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
     
     /* Mobile canvas background pattern */
@@ -1316,6 +1388,7 @@ image.png/* Answer controls - ALWAYS SHOW */
         z-index: 100;
         border: none;
         box-shadow: none;
+        overflow: hidden;
     }
     
     .left-panel.mobile-active .panel-header,
@@ -1331,7 +1404,10 @@ image.png/* Answer controls - ALWAYS SHOW */
     .right-panel.mobile-active .panel-content {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
         padding: 20px;
+        padding-bottom: 40px; /* Extra padding at bottom to prevent nav bar overlap */
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
     
     .canvas-header {
@@ -1390,6 +1466,7 @@ image.png/* Answer controls - ALWAYS SHOW */
     
     .brainstorming-area {
         padding: 8px 16px; /* Much smaller padding to move content up */
+        padding-bottom: 40px; /* Extra padding at bottom to prevent nav bar overlap */
         background: transparent;
         min-height: auto;
     }
