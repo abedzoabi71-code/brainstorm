@@ -119,7 +119,7 @@
 <body>
     <div class="login-form">
         <h2>Sign In</h2>
-        <form id="loginForm" method="post" action="index.html" autocomplete="on">
+        <form id="loginForm" autocomplete="on">
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" placeholder="Enter your email" autocomplete="username" required>
@@ -149,7 +149,7 @@
         // Initialize Supabase
         const supabaseUrl = 'https://jfcykejtgxbmarxmhkbw.supabase.co';
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpmY3lrZWp0Z3hibWFyeG1oa2J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMTUzMzYsImV4cCI6MjA3Mzg5MTMzNn0.ZdFZOSiSUum7KmVwMiGA5f8CstvxEUcjGL-bpFPeacI';
-        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
@@ -158,6 +158,8 @@
         const form = document.getElementById('loginForm');
         
         let userTyped = false;
+        let isLoggingIn = false;
+        let autoFillInterval = null;
 
         // Password toggle functionality
         passwordToggle.addEventListener('click', () => {
@@ -195,18 +197,38 @@
         
         // Check for auto-fill and submit
         const checkAutoFill = async () => {
-            if (emailInput.value && passwordInput.value && !userTyped) {
-                console.log('Auto-fill detected, submitting...');
-                await handleLogin();
+            // Don't auto-submit if user is already logging in, has typed, or if there's an error
+            if (isLoggingIn || userTyped || !emailInput.value || !passwordInput.value) {
+                return;
             }
+            
+            // Stop the interval once we detect auto-fill
+            if (autoFillInterval) {
+                clearInterval(autoFillInterval);
+                autoFillInterval = null;
+            }
+            
+            console.log('Auto-fill detected, submitting...');
+            await handleLogin();
         };
         
-        // Check periodically for auto-fill
-        setInterval(checkAutoFill, 100);
+        // Check periodically for auto-fill (only if credentials were saved)
+        if (savedEmail && savedPassword) {
+            autoFillInterval = setInterval(checkAutoFill, 100);
+            // Stop after 5 seconds to prevent infinite checking
+            setTimeout(() => {
+                if (autoFillInterval) {
+                    clearInterval(autoFillInterval);
+                    autoFillInterval = null;
+                }
+            }, 5000);
+        }
         
-        // Also check on focus events
-        emailInput.addEventListener('focus', () => setTimeout(checkAutoFill, 200));
-        passwordInput.addEventListener('focus', () => setTimeout(checkAutoFill, 200));
+        // Also check on focus events (only if credentials were saved)
+        if (savedEmail && savedPassword) {
+            emailInput.addEventListener('focus', () => setTimeout(checkAutoFill, 200));
+            passwordInput.addEventListener('focus', () => setTimeout(checkAutoFill, 200));
+        }
 
         // Handle form submission
         form.addEventListener('submit', async (e) => {
@@ -215,6 +237,11 @@
         });
 
         async function handleLogin() {
+            // Prevent multiple simultaneous login attempts
+            if (isLoggingIn) {
+                return;
+            }
+            
             const email = emailInput.value;
             const password = passwordInput.value;
             
@@ -223,8 +250,17 @@
                 return;
             }
 
+            // Stop auto-fill interval
+            if (autoFillInterval) {
+                clearInterval(autoFillInterval);
+                autoFillInterval = null;
+            }
+
+            isLoggingIn = true;
+            userTyped = true; // Mark as user-initiated to prevent auto-submit after error
+
             try {
-                const { data, error } = await supabase.auth.signInWithPassword({
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
                     email,
                     password
                 });
@@ -242,6 +278,8 @@
                 // Redirect to main app
                 window.location.href = 'index.html';
             } catch (error) {
+                isLoggingIn = false;
+                // Keep userTyped as true to prevent auto-submit after error
                 alert('Error: ' + error.message);
             }
         }
